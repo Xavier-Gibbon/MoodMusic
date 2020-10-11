@@ -1,12 +1,18 @@
 package com.example.moodmusic
 
+import android.Manifest
 import android.content.ContentResolver
+import android.content.pm.PackageManager
 import android.database.Cursor
+import android.os.Build
 import android.os.Bundle
 import android.provider.MediaStore.Audio.Media
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+
+const val PERMISSION_CODE = 55
 
 class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -21,7 +27,26 @@ class MainActivity : AppCompatActivity() {
         list.adapter = MusicAdapter(data) {}
     }
 
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        if (requestCode == PERMISSION_CODE) {
+            if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                recreate()
+            }
+        }
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+    }
+
     private fun getMusicFiles() : List<MusicDetails> {
+        if (Build.VERSION.SDK_INT >= 23 && checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+            // TODO: The permission should be requested when the user interacts with some sort of component.
+            ActivityCompat.requestPermissions(this, listOf(Manifest.permission.READ_EXTERNAL_STORAGE).toTypedArray(), PERMISSION_CODE)
+            return listOf()
+        }
+
         val result = mutableListOf<MusicDetails>()
 
         val resolver: ContentResolver = contentResolver
@@ -32,7 +57,7 @@ class MainActivity : AppCompatActivity() {
                 // TODO: query failed, handle error.
             }
             !cursor.moveToFirst() -> {
-                // no media on the device
+                return listOf()
             }
             else -> {
                 do {

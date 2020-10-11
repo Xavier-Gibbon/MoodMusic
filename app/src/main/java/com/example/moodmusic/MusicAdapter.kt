@@ -29,7 +29,7 @@ class MusicAdapter(
         private val number: TextView = v.findViewById(R.id.txt_name)
 
         fun bind(item: MusicDetails) {
-            number.text = item.toString()
+            number.text = item.title
             v.setOnClickListener { listener(item) }
         }
 
