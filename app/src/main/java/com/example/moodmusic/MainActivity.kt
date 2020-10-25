@@ -2,8 +2,12 @@ package com.example.moodmusic
 
 import android.Manifest
 import android.content.ContentResolver
+import android.content.ContentUris
 import android.content.pm.PackageManager
 import android.database.Cursor
+import android.media.AudioAttributes
+import android.media.AudioManager
+import android.media.MediaPlayer
 import android.os.Build
 import android.os.Bundle
 import android.provider.MediaStore.Audio.Media
@@ -11,20 +15,40 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.google.android.material.floatingactionbutton.FloatingActionButton
 
 const val PERMISSION_CODE = 55
 
 class MainActivity : AppCompatActivity() {
+    private val selectedMusic = mutableListOf<MusicDetails>()
+    private lateinit var playerManager: MoodMusicPlayerManager
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_list_view)
+        playerManager = MoodMusicPlayerManager(this)
+
+        if (Build.VERSION.SDK_INT >= 23 && checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+            // TODO: The permission should be requested when the user interacts with some sort of component.
+            ActivityCompat.requestPermissions(this, listOf(Manifest.permission.READ_EXTERNAL_STORAGE).toTypedArray(), PERMISSION_CODE)
+            return
+        }
 
         val list = findViewById<RecyclerView>(R.id.list_music)
-
         val data = getMusicFiles()
+        val adapter = MusicAdapter(data)
 
         list.layoutManager = LinearLayoutManager(this)
-        list.adapter = MusicAdapter(data) {}
+        list.adapter = adapter
+
+        findViewById<FloatingActionButton>(R.id.btn_playitnow).setOnClickListener {
+            if (adapter.selectedData.isEmpty()) {
+                return@setOnClickListener
+            }
+
+            playerManager.playList = adapter.selectedData
+            playerManager.play()
+        }
     }
 
     override fun onRequestPermissionsResult(
@@ -74,5 +98,10 @@ class MainActivity : AppCompatActivity() {
         cursor?.close()
 
         return result
+    }
+
+    override fun onStop() {
+        super.onStop()
+        playerManager.teardown()
     }
 }
