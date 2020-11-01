@@ -3,6 +3,7 @@
     package="com.example.moodmusic">
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
 
     <application
         android:allowBackup="true"
@@ -11,7 +12,7 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/AppTheme">
-        <activity android:name=".MainActivity">
+        <activity android:name=".MoodMusicBrowserClient">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 
@@ -19,13 +20,13 @@
             </intent-filter>
         </activity>
 
-        <!--<service android:name=".MoodMusicBrowserService">
+        <service android:name=".browserservice.MoodMusicBrowserService">
             <intent-filter>
                 <action android:name="android.intent.action.MEDIA_BUTTON" />
                 <action android:name="android.media.AUDIO_BECOMING_NOISY" />
                 <action android:name="android.media.browse.MediaBrowserService" />
             </intent-filter>
-        </service> -->
+        </service>
     </application>
 
 </manifest>

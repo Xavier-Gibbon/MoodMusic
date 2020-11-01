@@ -2,12 +2,8 @@ package com.example.moodmusic
 
 import android.Manifest
 import android.content.ContentResolver
-import android.content.ContentUris
 import android.content.pm.PackageManager
 import android.database.Cursor
-import android.media.AudioAttributes
-import android.media.AudioManager
-import android.media.MediaPlayer
 import android.os.Build
 import android.os.Bundle
 import android.provider.MediaStore.Audio.Media
@@ -15,12 +11,12 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.example.moodmusic.browserservice.MoodMusicPlayerManager
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 
 const val PERMISSION_CODE = 55
 
 class MainActivity : AppCompatActivity() {
-    private val selectedMusic = mutableListOf<MusicDetails>()
     private lateinit var playerManager: MoodMusicPlayerManager
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -35,7 +31,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         val list = findViewById<RecyclerView>(R.id.list_music)
-        val data = getMusicFiles()
+        /*val data = getMusicFiles()
         val adapter = MusicAdapter(data)
 
         list.layoutManager = LinearLayoutManager(this)
@@ -48,7 +44,7 @@ class MainActivity : AppCompatActivity() {
 
             playerManager.playList = adapter.selectedData
             playerManager.play()
-        }
+        }*/
     }
 
     override fun onRequestPermissionsResult(
@@ -89,8 +85,8 @@ class MainActivity : AppCompatActivity() {
                     val thisTitle = cursor.getString(cursor.getColumnIndex(Media.TITLE))
                     val isMusic = cursor.getInt(cursor.getColumnIndex(Media.IS_MUSIC))
                     if (isMusic != 0) {
-                        val newMusic = MusicDetails(thisId, thisTitle)
-                        result.add(newMusic)
+                        //val newMusic = MusicDetails(thisId, thisTitle, "", 1)
+                        //result.add(newMusic)
                     }
                 } while (cursor.moveToNext())
             }
@@ -100,8 +96,8 @@ class MainActivity : AppCompatActivity() {
         return result
     }
 
-    override fun onStop() {
-        super.onStop()
+    override fun onDestroy() {
+        super.onDestroy()
         playerManager.teardown()
     }
 }

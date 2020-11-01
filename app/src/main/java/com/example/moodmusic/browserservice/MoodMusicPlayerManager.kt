@@ -1,11 +1,9 @@
-package com.example.moodmusic
+package com.example.moodmusic.browserservice
 
-import android.content.ContentUris
 import android.content.Context
 import android.media.AudioAttributes
 import android.media.MediaPlayer
-import android.net.Uri
-import android.provider.MediaStore
+import android.support.v4.media.MediaDescriptionCompat
 
 // This class is responsible for knowing what songs are in the current playlist
 // as well as having the means to play those songs
@@ -13,19 +11,23 @@ import android.provider.MediaStore
 class MoodMusicPlayerManager(
     private val context: Context
 ) {
-    var playList: List<MusicDetails> = mutableListOf()
+    var playList: MutableList<MediaDescriptionCompat> = mutableListOf()
     var currentMusic = 0
 
     private var player: MediaPlayer? = null
 
+    fun hasMusic(): Boolean {
+        return playList.isEmpty()
+    }
+
     fun play() {
         // Can't play anything if the playlist is empty
-        if (playList.isEmpty()) {
+        if (hasMusic()) {
             return
         }
 
         if (player == null) {
-            player = createNewReadyPlayer(createUriForCurrentMusic())
+            player = createNewReadyPlayer()
         }
 
         player!!.apply {
@@ -37,7 +39,7 @@ class MoodMusicPlayerManager(
 
     fun pause() {
         // Can't pause anything if the playlist is empty
-        if (playList.isEmpty()) {
+        if (hasMusic()) {
             return
         }
 
@@ -50,7 +52,7 @@ class MoodMusicPlayerManager(
 
     fun stop() {
         // Can't stop anything if...you get the point
-        if (playList.isEmpty()) {
+        if (hasMusic()) {
             return
         }
 
@@ -62,7 +64,7 @@ class MoodMusicPlayerManager(
     }
 
     fun skipToNext() {
-        if (playList.isEmpty()) {
+        if (hasMusic()) {
             return
         }
 
@@ -70,7 +72,7 @@ class MoodMusicPlayerManager(
         if (currentMusic >= playList.size) {
             currentMusic = 0
         }
-        val newPlayer = createNewReadyPlayer(createUriForCurrentMusic())
+        val newPlayer = createNewReadyPlayer()
         player?.apply {
             stop()
             release()
@@ -81,7 +83,7 @@ class MoodMusicPlayerManager(
     }
 
     fun skipToPrevious() {
-        if (playList.isEmpty()) {
+        if (hasMusic()) {
             return
         }
 
@@ -89,7 +91,7 @@ class MoodMusicPlayerManager(
         if (currentMusic < 0) {
             currentMusic = playList.size - 1
         }
-        val newPlayer = createNewReadyPlayer(createUriForCurrentMusic())
+        val newPlayer = createNewReadyPlayer()
         player?.apply {
             stop()
             release()
@@ -97,6 +99,14 @@ class MoodMusicPlayerManager(
 
         player = newPlayer
         player!!.start()
+    }
+
+    fun addQueueItem(newItem: MediaDescriptionCompat) {
+        playList.add(newItem)
+    }
+
+    fun getCurrentSong(): MediaDescriptionCompat {
+        return playList[currentMusic]
     }
 
     fun teardown() {
@@ -108,7 +118,8 @@ class MoodMusicPlayerManager(
         player = null
     }
 
-    private fun createNewReadyPlayer(uri: Uri) : MediaPlayer {
+    private fun createNewReadyPlayer() : MediaPlayer {
+        val uri = playList[currentMusic].mediaUri
         return MediaPlayer().apply {
             setAudioAttributes(
                 AudioAttributes.Builder()
@@ -116,15 +127,13 @@ class MoodMusicPlayerManager(
                     .setUsage(AudioAttributes.USAGE_MEDIA)
                     .build()
             )
-            setDataSource(context, uri)
+            if (uri != null) {
+                setDataSource(context, uri)
+            }
             prepare()
             setOnCompletionListener {
                 skipToNext()
             }
         }
-    }
-
-    private fun createUriForCurrentMusic() : Uri {
-        return ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, playList[currentMusic].id)
     }
 }

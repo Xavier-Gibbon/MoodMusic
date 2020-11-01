@@ -6,13 +6,20 @@ import android.os.Bundle
 import android.support.v4.media.MediaBrowserCompat
 import android.support.v4.media.MediaMetadataCompat
 import android.support.v4.media.session.MediaControllerCompat
+import android.support.v4.media.session.MediaSessionCompat
 import android.support.v4.media.session.PlaybackStateCompat
+import android.util.Log
 import android.widget.ImageView
+import android.widget.LinearLayout
 import androidx.appcompat.app.AppCompatActivity
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
+import com.example.moodmusic.browserservice.MoodMusicBrowserService
 
 class MoodMusicBrowserClient : AppCompatActivity() {
 
     private lateinit var mediaBrowser: MediaBrowserCompat
+    private var rootString = ""
     private val connectionCallbacks = object : MediaBrowserCompat.ConnectionCallback() {
         override fun onConnected() {
 
@@ -31,6 +38,9 @@ class MoodMusicBrowserClient : AppCompatActivity() {
 
             // Finish building the UI
             buildTransportControls()
+
+            rootString = mediaBrowser.root
+            mediaBrowser.subscribe(rootString, subscriptionCallback)
         }
 
         override fun onConnectionSuspended() {
@@ -43,11 +53,16 @@ class MoodMusicBrowserClient : AppCompatActivity() {
 
         fun buildTransportControls() {
             val mediaController = MediaControllerCompat.getMediaController(this@MoodMusicBrowserClient)
+            val adapter = findViewById<RecyclerView>(R.id.list_music).adapter as MusicAdapter
             // Grab the view for the play/pause button
-            findViewById<ImageView>(R.id.btn_play_pause).apply {
+            findViewById<ImageView>(R.id.btn_playitnow).apply {
                 setOnClickListener {
                     // Since this is a play/pause button, you'll need to test the current state
                     // and choose the action accordingly
+
+                    adapter.selectedData.forEach {
+                        mediaController.addQueueItem(it.description)
+                    }
 
                     val pbState = mediaController.playbackState.state
                     if (pbState == PlaybackStateCompat.STATE_PLAYING) {
@@ -55,18 +70,6 @@ class MoodMusicBrowserClient : AppCompatActivity() {
                     } else {
                         mediaController.transportControls.play()
                     }
-                }
-            }
-
-            findViewById<ImageView>(R.id.btn_next).apply {
-                setOnClickListener {
-                    mediaController.transportControls.skipToNext()
-                }
-            }
-
-            findViewById<ImageView>(R.id.btn_previous).apply {
-                setOnClickListener {
-                    mediaController.transportControls.skipToPrevious()
                 }
             }
 
@@ -83,17 +86,45 @@ class MoodMusicBrowserClient : AppCompatActivity() {
 
         override fun onMetadataChanged(metadata: MediaMetadataCompat?) {
             //Update the UI to look different
+            Log.d(MoodMusicBrowserClient::class.qualifiedName, "onMetadataChanged")
         }
 
         override fun onPlaybackStateChanged(state: PlaybackStateCompat?) {
             //Change play/pause button
+            state?.apply {
+                findViewById<ImageView>(R.id.btn_playitnow).apply {
+                    if (state.state == PlaybackStateCompat.STATE_PLAYING) {
+                        setImageResource(android.R.drawable.ic_media_pause)
+                    } else {
+                        setImageResource(android.R.drawable.ic_media_play)
+                    }
+                }
+            }
+
+        }
+    }
+
+    private var subscriptionCallback = object: MediaBrowserCompat.SubscriptionCallback() {
+        override fun onChildrenLoaded(
+            parentId: String,
+            children: MutableList<MediaBrowserCompat.MediaItem>
+        ) {
+            val adapter = findViewById<RecyclerView>(R.id.list_music).adapter as MusicAdapter
+            adapter.updateDataset(children)
+            adapter.notifyDataSetChanged()
         }
     }
 
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_main)
+        setContentView(R.layout.activity_list_view)
+
+        val adapter = MusicAdapter(mutableListOf())
+        val list = findViewById<RecyclerView>(R.id.list_music)
+
+        list.layoutManager = LinearLayoutManager(this@MoodMusicBrowserClient)
+        list.adapter = adapter
         // ...
         // Create MediaBrowserServiceCompat
         mediaBrowser = MediaBrowserCompat(
