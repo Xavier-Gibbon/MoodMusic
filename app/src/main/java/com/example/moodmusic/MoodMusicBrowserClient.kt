@@ -16,6 +16,8 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.example.moodmusic.browserservice.MoodMusicBrowserService
 
+const val SELECTED_MUSIC_KEY = "selected_music"
+
 class MoodMusicBrowserClient : AppCompatActivity() {
 
     private lateinit var mediaBrowser: MediaBrowserCompat
@@ -54,7 +56,7 @@ class MoodMusicBrowserClient : AppCompatActivity() {
             // Grab the view for the play/pause button
             findViewById<ImageView>(R.id.btn_play_pause).setOnClickListener {
                 //TODO: Move this part to a different button, it shouldn't be part of the play button
-                adapter.selectedData.forEach {
+                adapter.getSelectedItems().forEach {
                     mediaController.addQueueItem(it.description)
                 }
 
@@ -77,12 +79,13 @@ class MoodMusicBrowserClient : AppCompatActivity() {
             // Display the initial state
             val metadata = mediaController.metadata
             val pbState = mediaController.playbackState
+            controllerCallback.onMetadataChanged(metadata)
+            controllerCallback.onPlaybackStateChanged(pbState)
 
             // Register a Callback to stay in sync
             mediaController.registerCallback(controllerCallback)
         }
     }
-
     private var controllerCallback = object : MediaControllerCompat.Callback() {
 
         override fun onMetadataChanged(metadata: MediaMetadataCompat?) {
@@ -104,7 +107,6 @@ class MoodMusicBrowserClient : AppCompatActivity() {
 
         }
     }
-
     private var subscriptionCallback = object: MediaBrowserCompat.SubscriptionCallback() {
         override fun onChildrenLoaded(
             parentId: String,
@@ -121,7 +123,12 @@ class MoodMusicBrowserClient : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_list_view)
 
-        val adapter = MusicAdapter(mutableListOf())
+        val data = mutableListOf<String>()
+        if (savedInstanceState !== null) {
+            data.addAll(savedInstanceState.getStringArrayList(SELECTED_MUSIC_KEY)!!)
+        }
+
+        val adapter = MusicAdapter(data)
         val list = findViewById<RecyclerView>(R.id.list_music)
 
         list.layoutManager = LinearLayoutManager(this@MoodMusicBrowserClient)
@@ -151,5 +158,11 @@ class MoodMusicBrowserClient : AppCompatActivity() {
         // (see "stay in sync with the MediaSession")
         MediaControllerCompat.getMediaController(this)?.unregisterCallback(controllerCallback)
         mediaBrowser.disconnect()
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        val adapter = findViewById<RecyclerView>(R.id.list_music).adapter as MusicAdapter
+        outState.putStringArrayList(SELECTED_MUSIC_KEY, ArrayList(adapter.selectedIds))
     }
 }

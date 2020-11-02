@@ -12,6 +12,7 @@ import android.database.Cursor
 import android.media.AudioAttributes
 import android.media.AudioFocusRequest
 import android.media.AudioManager
+import android.net.Uri
 import android.os.Bundle
 import android.provider.MediaStore
 import android.provider.MediaStore.Audio.Media
@@ -122,10 +123,12 @@ class MoodMusicBrowserService : MediaBrowserServiceCompat() {
         }
 
         override fun onSkipToNext() {
+            createMetadataAndPlaybackState(PlaybackStateCompat.STATE_PLAYING, PlaybackStateCompat.ACTION_PAUSE)
             player.skipToNext()
         }
 
         override fun onSkipToPrevious() {
+            createMetadataAndPlaybackState(PlaybackStateCompat.STATE_PLAYING, PlaybackStateCompat.ACTION_PAUSE)
             player.skipToPrevious()
         }
 
@@ -342,7 +345,7 @@ class MoodMusicBrowserService : MediaBrowserServiceCompat() {
                         .setTitle(thisTitle)
                         .setSubtitle(thisArtist)
                         .setMediaUri(ContentUris.withAppendedId(Media.EXTERNAL_CONTENT_URI, thisId))
-                        .setIconUri(ContentUris.withAppendedId(MediaStore.Audio.Albums.EXTERNAL_CONTENT_URI, thisAlbumId))
+                        .setIconUri(ContentUris.withAppendedId(Uri.parse("content://media/external/audio/albumart"), thisAlbumId))
                         .build()
 
                     listOfMusic.add(desc)

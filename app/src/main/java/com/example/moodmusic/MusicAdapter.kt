@@ -1,18 +1,20 @@
 package com.example.moodmusic
 
 import android.graphics.Color
-import android.media.browse.MediaBrowser
 import android.support.v4.media.MediaBrowserCompat
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.ImageView
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
+import com.squareup.picasso.Picasso
+import java.io.File
 
 class MusicAdapter(
-    private val data: MutableList<MediaBrowserCompat.MediaItem>
+    var selectedIds: MutableList<String>
 ) : RecyclerView.Adapter<MusicAdapter.ViewHolder>() {
-    var selectedData: MutableList<MediaBrowserCompat.MediaItem> = mutableListOf()
+    private val data: MutableList<MediaBrowserCompat.MediaItem> = mutableListOf()
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
         val layoutInflater = LayoutInflater.from(parent.context)
@@ -26,7 +28,7 @@ class MusicAdapter(
     override fun onBindViewHolder(holder: MusicAdapter.ViewHolder, position: Int) {
         val item = data[position]
         holder.bind(item)
-        if (selectedData.contains(item)) {
+        if (selectedIds.contains(item.mediaId)) {
             holder.itemView.setBackgroundColor(Color.parseColor("#CCCCCC"))
         } else {
             holder.itemView.setBackgroundColor(Color.parseColor("#FFFFFF"))
@@ -35,23 +37,43 @@ class MusicAdapter(
 
     fun updateDataset(newList: MutableList<MediaBrowserCompat.MediaItem>) {
         data.clear()
-        newList.forEach {
-            data.add(it)
+        data.addAll(newList)
+    }
+
+    fun getSelectedItems(): MutableList<MediaBrowserCompat.MediaItem> {
+        val result = mutableListOf<MediaBrowserCompat.MediaItem>()
+        selectedIds.forEach {
+            val item = data.find { song -> song.mediaId == it }
+            item?.apply {
+                result.add(this)
+            }
         }
+
+        return result
     }
 
     inner class ViewHolder(private val v: View) : RecyclerView.ViewHolder(v) {
-        private val number: TextView = v.findViewById(R.id.txt_name)
+        private val title: TextView = v.findViewById(R.id.txt_title)
+        private val artist: TextView = v.findViewById(R.id.txt_artist)
+        private val albumnArt: ImageView = v.findViewById(R.id.img_album_art)
 
         fun bind(item: MediaBrowserCompat.MediaItem) {
-            number.text = item.description.title
+            title.text = item.description.title
+            artist.text = item.description.subtitle
+
+            Picasso.get()
+                .load(item.description.iconUri)
+                .error(R.drawable.ic_baseline_music_note_24)
+                .placeholder(R.drawable.ic_baseline_music_note_24)
+                .into(albumnArt)
+
             v.setOnClickListener {
-                if (selectedData.contains(item)) {
-                    selectedData.remove(item)
+                if (selectedIds.contains(item.mediaId)) {
+                    selectedIds.remove(item.mediaId)
                     v.setBackgroundColor(Color.parseColor("#FFFFFF"))
                 } else {
-                    selectedData.add(item)
-                    v.setBackgroundColor(Color.parseColor("#CCCCCC"))
+                    selectedIds.add(item.mediaId!!)
+                    v.setBackgroundColor(Color.parseColor("#DDDDDD"))
                 }
             }
         }
