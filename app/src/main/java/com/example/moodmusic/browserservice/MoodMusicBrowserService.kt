@@ -12,7 +12,6 @@ import android.database.Cursor
 import android.media.AudioAttributes
 import android.media.AudioFocusRequest
 import android.media.AudioManager
-import android.media.browse.MediaBrowser
 import android.os.Bundle
 import android.provider.MediaStore
 import android.provider.MediaStore.Audio.Media
@@ -27,7 +26,6 @@ import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import androidx.media.MediaBrowserServiceCompat
 import androidx.media.session.MediaButtonReceiver
-import com.example.moodmusic.MusicDetails
 import com.example.moodmusic.R
 
 
@@ -85,13 +83,7 @@ class MoodMusicBrowserService : MediaBrowserServiceCompat() {
                 startService(Intent(applicationContext, MediaBrowserService::class.java))
                 // Set the session active  (and update metadata and state)
                 mediaSession.isActive = true
-                val currentSong = player.getCurrentSong()
-                val metadata = MediaMetadataCompat.Builder()
-                    .putText(MediaMetadataCompat.METADATA_KEY_TITLE, currentSong.title)
-                    .putText(MediaMetadataCompat.METADATA_KEY_ARTIST, currentSong.subtitle)
-                    .putString(MediaMetadataCompat.METADATA_KEY_MEDIA_URI, currentSong.mediaUri.toString())
-                    .build()
-                mediaSession.setMetadata(metadata)
+                createMetadataAndPlaybackState(PlaybackStateCompat.STATE_PLAYING, PlaybackStateCompat.ACTION_PAUSE)
                 // start the player (custom call)
                 player.play()
                 // Register BECOME_NOISY BroadcastReceiver
@@ -110,6 +102,7 @@ class MoodMusicBrowserService : MediaBrowserServiceCompat() {
             this@MoodMusicBrowserService.stopSelf()
             // Set the session inactive  (and update metadata and state)
             mediaSession.isActive = false
+            createMetadataAndPlaybackState(PlaybackStateCompat.STATE_STOPPED, PlaybackStateCompat.ACTION_PLAY)
             // stop the player (custom call)
             player.stop()
             // Take the service out of the foreground
@@ -119,6 +112,7 @@ class MoodMusicBrowserService : MediaBrowserServiceCompat() {
         override fun onPause() {
             val am = applicationContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
             // Update metadata and state
+            createMetadataAndPlaybackState(PlaybackStateCompat.STATE_PAUSED, PlaybackStateCompat.ACTION_PLAY)
             // pause the player (custom call)
             player.pause()
             // unregister BECOME_NOISY BroadcastReceiver
@@ -140,6 +134,25 @@ class MoodMusicBrowserService : MediaBrowserServiceCompat() {
                 player.addQueueItem(this)
             }
         }
+
+        fun createMetadataAndPlaybackState(newState: Int, newAction: Long) {
+            val currentSong = player.getCurrentSong()
+            val metadata = MediaMetadataCompat.Builder()
+                .putText(MediaMetadataCompat.METADATA_KEY_TITLE, currentSong.title)
+                .putText(MediaMetadataCompat.METADATA_KEY_ARTIST, currentSong.subtitle)
+                .putString(MediaMetadataCompat.METADATA_KEY_MEDIA_URI, currentSong.mediaUri.toString())
+                .build()
+            val playbackState = PlaybackStateCompat.Builder()
+                .setState(newState, PlaybackStateCompat.PLAYBACK_POSITION_UNKNOWN, 1f)
+                .setActions(newAction or
+                        PlaybackStateCompat.ACTION_PLAY_PAUSE or
+                        PlaybackStateCompat.ACTION_SKIP_TO_NEXT or
+                        PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS)
+                .build()
+
+            mediaSession.setMetadata(metadata)
+            mediaSession.setPlaybackState(playbackState)
+        }
     }
 
 
@@ -150,7 +163,11 @@ class MoodMusicBrowserService : MediaBrowserServiceCompat() {
         mediaSession = MediaSessionCompat(baseContext, MoodMusicBrowserService::class.java.name).apply {
             // Set an initial PlaybackState with ACTION_PLAY, so media buttons can start the player
             stateBuilder = PlaybackStateCompat.Builder()
-                .setActions(PlaybackStateCompat.ACTION_PLAY or PlaybackStateCompat.ACTION_PLAY_PAUSE)
+                .setActions(
+                    PlaybackStateCompat.ACTION_PLAY or
+                            PlaybackStateCompat.ACTION_PLAY_PAUSE or
+                            PlaybackStateCompat.ACTION_SKIP_TO_NEXT or
+                            PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS)
             setPlaybackState(stateBuilder.build())
 
             // MySessionCallback() has methods that handle callbacks from a media controller
