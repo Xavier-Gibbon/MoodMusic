@@ -3,15 +3,13 @@ package com.example.moodmusic.browserservice
 import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
-import android.content.ContentResolver
-import android.content.ContentUris
-import android.content.Context
-import android.content.Intent
+import android.content.*
 import android.content.pm.PackageManager
 import android.database.Cursor
 import android.media.AudioAttributes
 import android.media.AudioFocusRequest
 import android.media.AudioManager
+import android.media.AudioManager.ACTION_AUDIO_BECOMING_NOISY
 import android.net.Uri
 import android.os.Bundle
 import android.provider.MediaStore
@@ -63,9 +61,19 @@ class MoodMusicBrowserService : MediaBrowserServiceCompat() {
             }
         }
 
+
     private val callback = object: MediaSessionCompat.Callback() {
         private lateinit var audioFocusRequest: AudioFocusRequest
+        private val noisyReceiver = object: BroadcastReceiver() {
+            override fun onReceive(context: Context?, intent: Intent?) {
+                if (intent?.action == ACTION_AUDIO_BECOMING_NOISY) {
+                    onPause()
+                }
+            }
+        }
+
         override fun onPlay() {
+            Log.d(this::class.qualifiedName, "onPlay called")
             val am = applicationContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
             // Request audio focus for playback, this registers the afChangeListener
 
@@ -80,25 +88,25 @@ class MoodMusicBrowserService : MediaBrowserServiceCompat() {
 
             val result = am.requestAudioFocus(audioFocusRequest)
             if (result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
+                Log.d(this::class.qualifiedName, "Audio focus granted, playing music")
                 // Start the service
-                startService(Intent(applicationContext, MediaBrowserService::class.java))
+                startService(Intent(baseContext, MoodMusicBrowserService::class.java))
                 // Set the session active  (and update metadata and state)
                 mediaSession.isActive = true
                 createMetadataAndPlaybackState(PlaybackStateCompat.STATE_PLAYING, PlaybackStateCompat.ACTION_PAUSE)
                 // start the player (custom call)
                 player.play()
-                // Register BECOME_NOISY BroadcastReceiver
-                    //registerReceiver(myNoisyAudioStreamReceiver, intentFilter)
+                registerReceiver(noisyReceiver, IntentFilter(ACTION_AUDIO_BECOMING_NOISY))
                 // Put the service in the foreground, post notification
                 this@MoodMusicBrowserService.createNotification()
             }
         }
 
         override fun onStop() {
+            Log.d(this::class.qualifiedName, "onStop called")
             val am = applicationContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
             // Abandon audio focus
             am.abandonAudioFocusRequest(audioFocusRequest)
-            //unregisterReceiver(myNoisyAudioStreamReceiver)
             // Stop the service
             this@MoodMusicBrowserService.stopSelf()
             // Set the session inactive  (and update metadata and state)
@@ -111,28 +119,31 @@ class MoodMusicBrowserService : MediaBrowserServiceCompat() {
         }
 
         override fun onPause() {
-            val am = applicationContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            applicationContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            Log.d(this::class.qualifiedName, "onPause called")
             // Update metadata and state
             createMetadataAndPlaybackState(PlaybackStateCompat.STATE_PAUSED, PlaybackStateCompat.ACTION_PLAY)
             // pause the player (custom call)
             player.pause()
-            // unregister BECOME_NOISY BroadcastReceiver
-            //unregisterReceiver(myNoisyAudioStreamReceiver)
+            unregisterReceiver(noisyReceiver)
             // Take the service out of the foreground, retain the notification
             this@MoodMusicBrowserService.stopForeground(false)
         }
 
         override fun onSkipToNext() {
+            Log.d(this::class.qualifiedName, "onSkipToNext called")
             createMetadataAndPlaybackState(PlaybackStateCompat.STATE_PLAYING, PlaybackStateCompat.ACTION_PAUSE)
             player.skipToNext()
         }
 
         override fun onSkipToPrevious() {
+            Log.d(this::class.qualifiedName, "onSkipToPrevious called")
             createMetadataAndPlaybackState(PlaybackStateCompat.STATE_PLAYING, PlaybackStateCompat.ACTION_PAUSE)
             player.skipToPrevious()
         }
 
         override fun onAddQueueItem(description: MediaDescriptionCompat?) {
+            Log.d(this::class.qualifiedName, "onAddQueueItem called")
             description?.apply {
                 player.addQueueItem(this)
             }
@@ -186,6 +197,11 @@ class MoodMusicBrowserService : MediaBrowserServiceCompat() {
         loadMusicFiles()
     }
 
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        MediaButtonReceiver.handleIntent(mediaSession, intent)
+        return super.onStartCommand(intent, flags, startId)
+    }
+
     override fun onGetRoot(
         clientPackageName: String,
         clientUid: Int,
@@ -227,16 +243,12 @@ class MoodMusicBrowserService : MediaBrowserServiceCompat() {
                 mediaItems.add(MediaBrowserCompat.MediaItem(it, MediaBrowserCompat.MediaItem.FLAG_PLAYABLE))
             }
         } else {
-            // Examine the passed parentMediaId to see which submenu we're at,
-            // and put the children of that menu in the mediaItems list...
+            // TODO: Maybe using this to show items of a playlist is the more ideal option?
         }
         result.sendResult(mediaItems)
     }
 
     fun createNotification() {
-        // Given a media session and its context (usually the component containing the session)
-        // Create a NotificationCompat.Builder
-
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
         // Get the session's metadata
@@ -274,6 +286,17 @@ class MoodMusicBrowserService : MediaBrowserServiceCompat() {
             setSmallIcon(android.R.drawable.ic_menu_help)
             color = ContextCompat.getColor(applicationContext, R.color.colorPrimaryDark)
 
+            // Add a skip to previous button
+            addAction(
+                NotificationCompat.Action(
+                    android.R.drawable.ic_media_previous,
+                    getString(R.string.pause),
+                    MediaButtonReceiver.buildMediaButtonPendingIntent(
+                        applicationContext,
+                        PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS
+                    )
+                )
+            )
             // Add a pause button
             addAction(
                 NotificationCompat.Action(
@@ -282,6 +305,17 @@ class MoodMusicBrowserService : MediaBrowserServiceCompat() {
                     MediaButtonReceiver.buildMediaButtonPendingIntent(
                         applicationContext,
                         PlaybackStateCompat.ACTION_PLAY_PAUSE
+                    )
+                )
+            )
+            // Add a skip to next button
+            addAction(
+                NotificationCompat.Action(
+                    android.R.drawable.ic_media_next,
+                    getString(R.string.pause),
+                    MediaButtonReceiver.buildMediaButtonPendingIntent(
+                        applicationContext,
+                        PlaybackStateCompat.ACTION_SKIP_TO_NEXT
                     )
                 )
             )
