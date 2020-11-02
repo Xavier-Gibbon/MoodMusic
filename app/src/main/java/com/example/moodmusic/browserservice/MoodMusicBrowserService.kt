@@ -1,6 +1,8 @@
 package com.example.moodmusic.browserservice
 
 import android.Manifest
+import android.annotation.SuppressLint
+import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.*
@@ -14,7 +16,6 @@ import android.net.Uri
 import android.os.Bundle
 import android.provider.MediaStore
 import android.provider.MediaStore.Audio.Media
-import android.service.media.MediaBrowserService
 import android.support.v4.media.MediaBrowserCompat
 import android.support.v4.media.MediaDescriptionCompat
 import android.support.v4.media.MediaMetadataCompat
@@ -93,12 +94,12 @@ class MoodMusicBrowserService : MediaBrowserServiceCompat() {
                 startService(Intent(baseContext, MoodMusicBrowserService::class.java))
                 // Set the session active  (and update metadata and state)
                 mediaSession.isActive = true
-                createMetadataAndPlaybackState(PlaybackStateCompat.STATE_PLAYING, PlaybackStateCompat.ACTION_PAUSE)
                 // start the player (custom call)
                 player.play()
                 registerReceiver(noisyReceiver, IntentFilter(ACTION_AUDIO_BECOMING_NOISY))
+                createMetadataAndPlaybackState(PlaybackStateCompat.STATE_PLAYING, PlaybackStateCompat.ACTION_PAUSE)
                 // Put the service in the foreground, post notification
-                this@MoodMusicBrowserService.createNotification()
+                this@MoodMusicBrowserService.updateNotification()
             }
         }
 
@@ -111,10 +112,11 @@ class MoodMusicBrowserService : MediaBrowserServiceCompat() {
             this@MoodMusicBrowserService.stopSelf()
             // Set the session inactive  (and update metadata and state)
             mediaSession.isActive = false
-            createMetadataAndPlaybackState(PlaybackStateCompat.STATE_STOPPED, PlaybackStateCompat.ACTION_PLAY)
             // stop the player (custom call)
             player.stop()
+            createMetadataAndPlaybackState(PlaybackStateCompat.STATE_STOPPED, PlaybackStateCompat.ACTION_PLAY)
             // Take the service out of the foreground
+            updateNotification()
             this@MoodMusicBrowserService.stopForeground(false)
         }
 
@@ -127,19 +129,30 @@ class MoodMusicBrowserService : MediaBrowserServiceCompat() {
             player.pause()
             unregisterReceiver(noisyReceiver)
             // Take the service out of the foreground, retain the notification
+            updateNotification()
             this@MoodMusicBrowserService.stopForeground(false)
         }
 
         override fun onSkipToNext() {
             Log.d(this::class.qualifiedName, "onSkipToNext called")
-            createMetadataAndPlaybackState(PlaybackStateCompat.STATE_PLAYING, PlaybackStateCompat.ACTION_PAUSE)
             player.skipToNext()
+            if (player.isPlaying()) {
+                createMetadataAndPlaybackState(PlaybackStateCompat.STATE_PLAYING, PlaybackStateCompat.ACTION_PAUSE)
+            } else {
+                createMetadataAndPlaybackState(PlaybackStateCompat.STATE_PAUSED, PlaybackStateCompat.ACTION_PLAY)
+            }
+            updateNotification()
         }
 
         override fun onSkipToPrevious() {
             Log.d(this::class.qualifiedName, "onSkipToPrevious called")
-            createMetadataAndPlaybackState(PlaybackStateCompat.STATE_PLAYING, PlaybackStateCompat.ACTION_PAUSE)
             player.skipToPrevious()
+            if (player.isPlaying()) {
+                createMetadataAndPlaybackState(PlaybackStateCompat.STATE_PLAYING, PlaybackStateCompat.ACTION_PAUSE)
+            } else {
+                createMetadataAndPlaybackState(PlaybackStateCompat.STATE_PAUSED, PlaybackStateCompat.ACTION_PLAY)
+            }
+            updateNotification()
         }
 
         override fun onAddQueueItem(description: MediaDescriptionCompat?) {
@@ -148,27 +161,9 @@ class MoodMusicBrowserService : MediaBrowserServiceCompat() {
                 player.addQueueItem(this)
             }
         }
-
-        fun createMetadataAndPlaybackState(newState: Int, newAction: Long) {
-            val currentSong = player.getCurrentSong()
-            val metadata = MediaMetadataCompat.Builder()
-                .putText(MediaMetadataCompat.METADATA_KEY_TITLE, currentSong.title)
-                .putText(MediaMetadataCompat.METADATA_KEY_ARTIST, currentSong.subtitle)
-                .putString(MediaMetadataCompat.METADATA_KEY_MEDIA_URI, currentSong.mediaUri.toString())
-                .build()
-            val playbackState = PlaybackStateCompat.Builder()
-                .setState(newState, PlaybackStateCompat.PLAYBACK_POSITION_UNKNOWN, 1f)
-                .setActions(newAction or
-                        PlaybackStateCompat.ACTION_PLAY_PAUSE or
-                        PlaybackStateCompat.ACTION_SKIP_TO_NEXT or
-                        PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS)
-                .build()
-
-            mediaSession.setMetadata(metadata)
-            mediaSession.setPlaybackState(playbackState)
-        }
     }
 
+    private lateinit var notificationBuilder: NotificationCompat.Builder
 
     override fun onCreate() {
         super.onCreate()
@@ -192,7 +187,12 @@ class MoodMusicBrowserService : MediaBrowserServiceCompat() {
             setFlags(MediaSessionCompat.FLAG_HANDLES_QUEUE_COMMANDS)
         }
 
-        player = MoodMusicPlayerManager(applicationContext)
+        player = MoodMusicPlayerManager(applicationContext) {
+            createMetadataAndPlaybackState(PlaybackStateCompat.STATE_PLAYING, PlaybackStateCompat.ACTION_PAUSE)
+            updateNotification()
+        }
+
+        initializeNotification()
 
         loadMusicFiles()
     }
@@ -248,28 +248,8 @@ class MoodMusicBrowserService : MediaBrowserServiceCompat() {
         result.sendResult(mediaItems)
     }
 
-    fun createNotification() {
-        val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-
-        // Get the session's metadata
-        val controller = mediaSession.controller
-        val mediaMetadata = controller.metadata
-        val description = mediaMetadata.description
-
-        val importance = NotificationManager.IMPORTANCE_LOW
-        val channel = NotificationChannel(CHANNEL_ID, getString(R.string.channel_name), importance)
-        manager.createNotificationChannel(channel)
-
-        val builder = NotificationCompat.Builder(applicationContext, CHANNEL_ID).apply {
-            // Add the metadata for the currently playing track
-            setContentTitle(description.title)
-            setContentText(description.subtitle)
-            setSubText(description.description)
-            setLargeIcon(description.iconBitmap)
-
-            // Enable launching the player by clicking the notification
-            setContentIntent(controller.sessionActivity)
-
+    private fun initializeNotification() {
+        notificationBuilder = NotificationCompat.Builder(applicationContext, CHANNEL_ID).apply {
             // Stop the service when the notification is swiped away
             setDeleteIntent(
                 MediaButtonReceiver.buildMediaButtonPendingIntent(
@@ -283,7 +263,7 @@ class MoodMusicBrowserService : MediaBrowserServiceCompat() {
 
             // Add an app icon and set its accent color
             // Be careful about the color
-            setSmallIcon(android.R.drawable.ic_menu_help)
+            setSmallIcon(R.drawable.ic_baseline_music_note_24)
             color = ContextCompat.getColor(applicationContext, R.color.colorPrimaryDark)
 
             // Add a skip to previous button
@@ -335,9 +315,73 @@ class MoodMusicBrowserService : MediaBrowserServiceCompat() {
                 )
             )
         }
+    }
+
+    fun createMetadataAndPlaybackState(newState: Int, newAction: Long) {
+        val currentSong = player.getCurrentSong()
+        val metadata = MediaMetadataCompat.Builder()
+            .putText(MediaMetadataCompat.METADATA_KEY_TITLE, currentSong.title)
+            .putText(MediaMetadataCompat.METADATA_KEY_ARTIST, currentSong.subtitle)
+            .putString(MediaMetadataCompat.METADATA_KEY_MEDIA_URI, currentSong.mediaUri.toString())
+            .build()
+        val playbackState = PlaybackStateCompat.Builder()
+            .setState(newState, PlaybackStateCompat.PLAYBACK_POSITION_UNKNOWN, 1f)
+            .setActions(newAction or
+                    PlaybackStateCompat.ACTION_PLAY_PAUSE or
+                    PlaybackStateCompat.ACTION_SKIP_TO_NEXT or
+                    PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS)
+            .build()
+
+        mediaSession.setMetadata(metadata)
+        mediaSession.setPlaybackState(playbackState)
+    }
+
+    @SuppressLint("RestrictedApi")
+    fun updateNotification() {
+        val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+
+        // Get the session's metadata
+        val controller = mediaSession.controller
+        val mediaMetadata = controller.metadata
+        val playbackState = controller.playbackState
+        val description = mediaMetadata.description
+
+        val importance = NotificationManager.IMPORTANCE_LOW
+        val channel = NotificationChannel(CHANNEL_ID, getString(R.string.channel_name), importance)
+        manager.createNotificationChannel(channel)
+
+        notificationBuilder.apply {
+            // Add the metadata for the currently playing track
+            setContentTitle(description.title)
+            setContentText(description.subtitle)
+            setSubText(description.description)
+            setLargeIcon(description.iconBitmap)
+
+            // Enable launching the player by clicking the notification
+            setContentIntent(controller.sessionActivity)
+
+            //Update the play/pause button icon
+            val icon: Int
+            val title: String
+            if (playbackState.state == PlaybackStateCompat.STATE_PLAYING) {
+                icon = android.R.drawable.ic_media_pause
+                title = getString(R.string.pause)
+            } else {
+                icon = android.R.drawable.ic_media_play
+                title = getString(R.string.play)
+            }
+            mActions[1] = NotificationCompat.Action(
+                icon,
+                title,
+                MediaButtonReceiver.buildMediaButtonPendingIntent(
+                    applicationContext,
+                    PlaybackStateCompat.ACTION_PLAY_PAUSE
+                )
+            )
+        }
 
         // Display the notification and place the service in the foreground
-        startForeground(NOTIFICATION_ID, builder.build())
+        startForeground(NOTIFICATION_ID, notificationBuilder.build())
 
     }
 

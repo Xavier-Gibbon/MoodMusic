@@ -9,7 +9,8 @@ import android.support.v4.media.MediaDescriptionCompat
 // as well as having the means to play those songs
 
 class MoodMusicPlayerManager(
-    private val context: Context
+    private val context: Context,
+    private val onPlayCompletion: () -> Unit
 ) {
     var playList: MutableList<MediaDescriptionCompat> = mutableListOf()
     var currentMusic = 0
@@ -17,12 +18,20 @@ class MoodMusicPlayerManager(
     private var player: MediaPlayer? = null
 
     fun hasMusic(): Boolean {
-        return playList.isEmpty()
+        return !playList.isEmpty()
+    }
+
+    fun isPlaying(): Boolean {
+        if (player == null) {
+            return false
+        }
+
+        return player!!.isPlaying
     }
 
     fun play() {
         // Can't play anything if the playlist is empty
-        if (hasMusic()) {
+        if (!hasMusic()) {
             return
         }
 
@@ -39,7 +48,7 @@ class MoodMusicPlayerManager(
 
     fun pause() {
         // Can't pause anything if the playlist is empty
-        if (hasMusic()) {
+        if (!hasMusic()) {
             return
         }
 
@@ -52,7 +61,7 @@ class MoodMusicPlayerManager(
 
     fun stop() {
         // Can't stop anything if...you get the point
-        if (hasMusic()) {
+        if (!hasMusic()) {
             return
         }
 
@@ -64,9 +73,15 @@ class MoodMusicPlayerManager(
     }
 
     fun skipToNext() {
-        if (hasMusic()) {
+        skipToNext(false)
+    }
+
+    fun skipToNext(forcePlay: Boolean) {
+        if (!hasMusic()) {
             return
         }
+
+        val shouldStartPlaying = forcePlay || player?.isPlaying!!
 
         currentMusic++
         if (currentMusic >= playList.size) {
@@ -79,13 +94,17 @@ class MoodMusicPlayerManager(
         }
 
         player = newPlayer
-        player!!.start()
+        if (shouldStartPlaying) {
+            player!!.start()
+        }
     }
 
     fun skipToPrevious() {
-        if (hasMusic()) {
+        if (!hasMusic()) {
             return
         }
+
+        val shouldStartPlaying = player?.isPlaying
 
         currentMusic--
         if (currentMusic < 0) {
@@ -98,7 +117,9 @@ class MoodMusicPlayerManager(
         }
 
         player = newPlayer
-        player!!.start()
+        if (shouldStartPlaying !== null && shouldStartPlaying) {
+            player!!.start()
+        }
     }
 
     fun addQueueItem(newItem: MediaDescriptionCompat) {
@@ -132,7 +153,8 @@ class MoodMusicPlayerManager(
             }
             prepare()
             setOnCompletionListener {
-                skipToNext()
+                skipToNext(true)
+                onPlayCompletion()
             }
         }
     }

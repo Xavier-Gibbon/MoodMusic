@@ -22,7 +22,7 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_list_view)
-        playerManager = MoodMusicPlayerManager(this)
+        playerManager = MoodMusicPlayerManager(this) {}
 
         if (Build.VERSION.SDK_INT >= 23 && checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
             // TODO: The permission should be requested when the user interacts with some sort of component.
