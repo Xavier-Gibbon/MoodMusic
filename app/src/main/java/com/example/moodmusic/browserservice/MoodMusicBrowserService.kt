@@ -12,6 +12,7 @@ import android.media.AudioAttributes
 import android.media.AudioFocusRequest
 import android.media.AudioManager
 import android.media.AudioManager.ACTION_AUDIO_BECOMING_NOISY
+import android.media.session.MediaSession
 import android.net.Uri
 import android.os.Bundle
 import android.provider.MediaStore
@@ -159,6 +160,13 @@ class MoodMusicBrowserService : MediaBrowserServiceCompat() {
             Log.d(this::class.qualifiedName, "onAddQueueItem called")
             description?.apply {
                 player.addQueueItem(this)
+
+                val queueToSetTo = mutableListOf<MediaSessionCompat.QueueItem>()
+                if (mediaSession.controller.queue != null) {
+                    queueToSetTo.addAll(mediaSession.controller.queue)
+                }
+                queueToSetTo.add(MediaSessionCompat.QueueItem(this, this.mediaId!!.toLong()))
+                mediaSession.setQueue(queueToSetTo)
             }
         }
     }

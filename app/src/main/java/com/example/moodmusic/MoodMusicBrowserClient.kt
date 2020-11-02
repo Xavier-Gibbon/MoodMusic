@@ -55,15 +55,20 @@ class MoodMusicBrowserClient : AppCompatActivity() {
             val adapter = findViewById<RecyclerView>(R.id.list_music).adapter as MusicAdapter
             // Grab the view for the play/pause button
             findViewById<ImageView>(R.id.btn_play_pause).setOnClickListener {
-                //TODO: Move this part to a different button, it shouldn't be part of the play button
-                adapter.getSelectedItems().forEach {
-                    mediaController.addQueueItem(it.description)
-                }
-
                 val pbState = mediaController.playbackState.state
                 if (pbState == PlaybackStateCompat.STATE_PLAYING) {
                     mediaController.transportControls.pause()
                 } else {
+                    //TODO: Move this part to a different button, it shouldn't be part of the play button
+                    if (mediaController.queue == null) {
+                        if (adapter.getSelectedItems().isEmpty()) {
+                            return@setOnClickListener
+                        }
+                        adapter.getSelectedItems().forEach {
+                            mediaController.addQueueItem(it.description)
+                        }
+                    }
+
                     mediaController.transportControls.play()
                 }
             }

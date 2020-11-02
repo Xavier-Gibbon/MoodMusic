@@ -18,7 +18,7 @@ class MoodMusicPlayerManager(
     private var player: MediaPlayer? = null
 
     fun hasMusic(): Boolean {
-        return !playList.isEmpty()
+        return playList.isNotEmpty()
     }
 
     fun isPlaying(): Boolean {
