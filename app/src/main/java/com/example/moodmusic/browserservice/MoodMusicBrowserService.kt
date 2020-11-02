@@ -13,8 +13,10 @@ import android.media.AudioFocusRequest
 import android.media.AudioManager
 import android.media.AudioManager.ACTION_AUDIO_BECOMING_NOISY
 import android.media.session.MediaSession
+import android.media.session.PlaybackState
 import android.net.Uri
 import android.os.Bundle
+import android.os.ResultReceiver
 import android.provider.MediaStore
 import android.provider.MediaStore.Audio.Media
 import android.support.v4.media.MediaBrowserCompat
@@ -29,6 +31,7 @@ import androidx.media.MediaBrowserServiceCompat
 import androidx.media.session.MediaButtonReceiver
 import com.example.moodmusic.R
 
+const val ACTION_RESET_QUEUE_PLACEMENT = "Reset_queue"
 
 private const val MEDIA_ROOT_ID = "media_root_id"
 private const val EMPTY_MEDIA_ROOT_ID = "empty_root_id"
@@ -66,7 +69,7 @@ class MoodMusicBrowserService : MediaBrowserServiceCompat() {
 
     private val callback = object: MediaSessionCompat.Callback() {
         private lateinit var audioFocusRequest: AudioFocusRequest
-        private val noisyReceiver = object: BroadcastReceiver() {
+        private val noisyReceiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context?, intent: Intent?) {
                 if (intent?.action == ACTION_AUDIO_BECOMING_NOISY) {
                     onPause()
@@ -76,6 +79,11 @@ class MoodMusicBrowserService : MediaBrowserServiceCompat() {
 
         override fun onPlay() {
             Log.d(this::class.qualifiedName, "onPlay called")
+
+            if (!player.hasMusic()) {
+                return
+            }
+
             val am = applicationContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
             // Request audio focus for playback, this registers the afChangeListener
 
@@ -98,7 +106,10 @@ class MoodMusicBrowserService : MediaBrowserServiceCompat() {
                 // start the player (custom call)
                 player.play()
                 registerReceiver(noisyReceiver, IntentFilter(ACTION_AUDIO_BECOMING_NOISY))
-                createMetadataAndPlaybackState(PlaybackStateCompat.STATE_PLAYING, PlaybackStateCompat.ACTION_PAUSE)
+                createMetadataAndPlaybackState(
+                    PlaybackStateCompat.STATE_PLAYING,
+                    PlaybackStateCompat.ACTION_PAUSE
+                )
                 // Put the service in the foreground, post notification
                 this@MoodMusicBrowserService.updateNotification()
             }
@@ -115,7 +126,10 @@ class MoodMusicBrowserService : MediaBrowserServiceCompat() {
             mediaSession.isActive = false
             // stop the player (custom call)
             player.stop()
-            createMetadataAndPlaybackState(PlaybackStateCompat.STATE_STOPPED, PlaybackStateCompat.ACTION_PLAY)
+            createMetadataAndPlaybackState(
+                PlaybackStateCompat.STATE_STOPPED,
+                PlaybackStateCompat.ACTION_PLAY
+            )
             // Take the service out of the foreground
             updateNotification()
             this@MoodMusicBrowserService.stopForeground(false)
@@ -125,7 +139,10 @@ class MoodMusicBrowserService : MediaBrowserServiceCompat() {
             applicationContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
             Log.d(this::class.qualifiedName, "onPause called")
             // Update metadata and state
-            createMetadataAndPlaybackState(PlaybackStateCompat.STATE_PAUSED, PlaybackStateCompat.ACTION_PLAY)
+            createMetadataAndPlaybackState(
+                PlaybackStateCompat.STATE_PAUSED,
+                PlaybackStateCompat.ACTION_PLAY
+            )
             // pause the player (custom call)
             player.pause()
             unregisterReceiver(noisyReceiver)
@@ -138,9 +155,15 @@ class MoodMusicBrowserService : MediaBrowserServiceCompat() {
             Log.d(this::class.qualifiedName, "onSkipToNext called")
             player.skipToNext()
             if (player.isPlaying()) {
-                createMetadataAndPlaybackState(PlaybackStateCompat.STATE_PLAYING, PlaybackStateCompat.ACTION_PAUSE)
+                createMetadataAndPlaybackState(
+                    PlaybackStateCompat.STATE_PLAYING,
+                    PlaybackStateCompat.ACTION_PAUSE
+                )
             } else {
-                createMetadataAndPlaybackState(PlaybackStateCompat.STATE_PAUSED, PlaybackStateCompat.ACTION_PLAY)
+                createMetadataAndPlaybackState(
+                    PlaybackStateCompat.STATE_PAUSED,
+                    PlaybackStateCompat.ACTION_PLAY
+                )
             }
             updateNotification()
         }
@@ -149,9 +172,15 @@ class MoodMusicBrowserService : MediaBrowserServiceCompat() {
             Log.d(this::class.qualifiedName, "onSkipToPrevious called")
             player.skipToPrevious()
             if (player.isPlaying()) {
-                createMetadataAndPlaybackState(PlaybackStateCompat.STATE_PLAYING, PlaybackStateCompat.ACTION_PAUSE)
+                createMetadataAndPlaybackState(
+                    PlaybackStateCompat.STATE_PLAYING,
+                    PlaybackStateCompat.ACTION_PAUSE
+                )
             } else {
-                createMetadataAndPlaybackState(PlaybackStateCompat.STATE_PAUSED, PlaybackStateCompat.ACTION_PLAY)
+                createMetadataAndPlaybackState(
+                    PlaybackStateCompat.STATE_PAUSED,
+                    PlaybackStateCompat.ACTION_PLAY
+                )
             }
             updateNotification()
         }
@@ -167,6 +196,34 @@ class MoodMusicBrowserService : MediaBrowserServiceCompat() {
                 }
                 queueToSetTo.add(MediaSessionCompat.QueueItem(this, this.mediaId!!.toLong()))
                 mediaSession.setQueue(queueToSetTo)
+            }
+        }
+
+        override fun onRemoveQueueItem(description: MediaDescriptionCompat?) {
+            Log.d(this::class.qualifiedName, "onRemoveQueueItem called")
+            description?.apply {
+                player.removeQueueItem(this.mediaId!!)
+                val queueToSetTo = mutableListOf<MediaSessionCompat.QueueItem>()
+                queueToSetTo.addAll(mediaSession.controller.queue)
+                val toRemove =
+                    queueToSetTo.find { queue -> queue.queueId == description.mediaId!!.toLong() }
+                toRemove?.apply {
+                    queueToSetTo.remove(this)
+                }
+
+                mediaSession.setQueue(queueToSetTo)
+            }
+        }
+
+        override fun onCustomAction(action: String?, extras: Bundle?) {
+            when (action) {
+                ACTION_RESET_QUEUE_PLACEMENT -> {
+                    if (mediaSession.controller.playbackState.state != PlaybackStateCompat.STATE_STOPPED && mediaSession.controller.playbackState.state != PlaybackStateCompat.STATE_NONE) {
+                        onStop()
+                    }
+
+                    player.currentMusic = 0
+                }
             }
         }
     }

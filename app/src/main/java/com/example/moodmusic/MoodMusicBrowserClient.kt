@@ -6,14 +6,13 @@ import android.os.Bundle
 import android.support.v4.media.MediaBrowserCompat
 import android.support.v4.media.MediaMetadataCompat
 import android.support.v4.media.session.MediaControllerCompat
-import android.support.v4.media.session.MediaSessionCompat
 import android.support.v4.media.session.PlaybackStateCompat
 import android.util.Log
 import android.widget.ImageView
-import android.widget.LinearLayout
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.example.moodmusic.browserservice.ACTION_RESET_QUEUE_PLACEMENT
 import com.example.moodmusic.browserservice.MoodMusicBrowserService
 
 const val SELECTED_MUSIC_KEY = "selected_music"
@@ -59,16 +58,6 @@ class MoodMusicBrowserClient : AppCompatActivity() {
                 if (pbState == PlaybackStateCompat.STATE_PLAYING) {
                     mediaController.transportControls.pause()
                 } else {
-                    //TODO: Move this part to a different button, it shouldn't be part of the play button
-                    if (mediaController.queue == null) {
-                        if (adapter.getSelectedItems().isEmpty()) {
-                            return@setOnClickListener
-                        }
-                        adapter.getSelectedItems().forEach {
-                            mediaController.addQueueItem(it.description)
-                        }
-                    }
-
                     mediaController.transportControls.play()
                 }
             }
@@ -79,6 +68,24 @@ class MoodMusicBrowserClient : AppCompatActivity() {
 
             findViewById<ImageView>(R.id.btn_prev).setOnClickListener {
                 mediaController.transportControls.skipToPrevious()
+            }
+
+            findViewById<ImageView>(R.id.btn_update_playlist).setOnClickListener {
+                if (adapter.getSelectedItems().isEmpty()) {
+                    return@setOnClickListener
+                }
+
+                mediaController.transportControls.sendCustomAction(ACTION_RESET_QUEUE_PLACEMENT, null)
+
+                if (mediaController.queue != null) {
+                    mediaController.queue.forEach {
+                        mediaController.removeQueueItem(it.description)
+                    }
+                }
+
+                adapter.getSelectedItems().forEach {
+                    mediaController.addQueueItem(it.description)
+                }
             }
 
             // Display the initial state

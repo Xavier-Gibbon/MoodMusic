@@ -68,8 +68,11 @@ class MoodMusicPlayerManager(
         player?.apply {
             if (isPlaying){
                 stop()
+                release()
             }
         }
+
+        player = null
     }
 
     fun skipToNext() {
@@ -124,6 +127,13 @@ class MoodMusicPlayerManager(
 
     fun addQueueItem(newItem: MediaDescriptionCompat) {
         playList.add(newItem)
+    }
+
+    fun removeQueueItem(itemId: String) {
+        val toRemove = playList.find { song -> song.mediaId == itemId }
+        toRemove?.apply {
+            playList.remove(this)
+        }
     }
 
     fun getCurrentSong(): MediaDescriptionCompat {
