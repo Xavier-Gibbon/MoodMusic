@@ -68,6 +68,9 @@ class MoodMusicBrowserService : MediaBrowserServiceCompat() {
     // This not only handles requests from the activity, but also from media buttons
     private val mediaCallback = object: MediaSessionCompat.Callback() {
         private lateinit var audioFocusRequest: AudioFocusRequest
+
+        // noisyReceiver is used to pause the music if the phone becomes noisy
+        // e.g. if the headphones are unplugged
         private val noisyReceiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context?, intent: Intent?) {
                 if (intent?.action == ACTION_AUDIO_BECOMING_NOISY) {
