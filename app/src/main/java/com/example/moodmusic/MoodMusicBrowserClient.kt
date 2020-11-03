@@ -21,6 +21,8 @@ class MoodMusicBrowserClient : AppCompatActivity() {
 
     private lateinit var mediaBrowser: MediaBrowserCompat
     private var rootString = ""
+
+    // connectionCallbacks handles the appropriate methods for connecting to the browser service
     private val connectionCallbacks = object : MediaBrowserCompat.ConnectionCallback() {
         override fun onConnected() {
             // Get the token for the MediaSession
@@ -42,13 +44,15 @@ class MoodMusicBrowserClient : AppCompatActivity() {
         }
 
         override fun onConnectionSuspended() {
-            // The Service has crashed. Disable transport controls until it automatically reconnects
+            // TODO: Disable the buttons here
         }
 
         override fun onConnectionFailed() {
-            // The Service has refused our connection
+            // TODO: This shouldn't really happen, but some error handling should go here
         }
 
+        // This sets up the buttons in the activity and updates the UI using the metadata and playback state
+        // TODO: Should we have the buttons disabled by default, then enabled here?
         fun buildTransportControls() {
             val mediaController = MediaControllerCompat.getMediaController(this@MoodMusicBrowserClient)
             val adapter = findViewById<RecyclerView>(R.id.list_music).adapter as MusicAdapter
@@ -65,7 +69,6 @@ class MoodMusicBrowserClient : AppCompatActivity() {
             findViewById<ImageView>(R.id.btn_next).setOnClickListener {
                 mediaController.transportControls.skipToNext()
             }
-
             findViewById<ImageView>(R.id.btn_prev).setOnClickListener {
                 mediaController.transportControls.skipToPrevious()
             }
@@ -75,6 +78,7 @@ class MoodMusicBrowserClient : AppCompatActivity() {
                     return@setOnClickListener
                 }
 
+                // When we are updating the playlist, we expect the media to go back to the start
                 mediaController.transportControls.sendCustomAction(ACTION_RESET_QUEUE_PLACEMENT, null)
 
                 if (mediaController.queue != null) {
@@ -98,10 +102,12 @@ class MoodMusicBrowserClient : AppCompatActivity() {
             mediaController.registerCallback(controllerCallback)
         }
     }
+
+    // controllerCallback handles any changes that can happen to the metadata or the playback state
     private var controllerCallback = object : MediaControllerCompat.Callback() {
 
         override fun onMetadataChanged(metadata: MediaMetadataCompat?) {
-            //Update the UI to look different
+            // TODO: when we finally show the current music playing, we should do it here
             Log.d(MoodMusicBrowserClient::class.qualifiedName, "onMetadataChanged")
         }
 
@@ -119,6 +125,9 @@ class MoodMusicBrowserClient : AppCompatActivity() {
 
         }
     }
+
+    // The subscription callback handles getting the media items from the service
+    // Right now, this just fills in the music list, but it can be used for showing playlists
     private var subscriptionCallback = object: MediaBrowserCompat.SubscriptionCallback() {
         override fun onChildrenLoaded(
             parentId: String,
@@ -145,8 +154,7 @@ class MoodMusicBrowserClient : AppCompatActivity() {
 
         list.layoutManager = LinearLayoutManager(this@MoodMusicBrowserClient)
         list.adapter = adapter
-        // ...
-        // Create MediaBrowserServiceCompat
+
         mediaBrowser = MediaBrowserCompat(
             this,
             ComponentName(this, MoodMusicBrowserService::class.java),
@@ -167,7 +175,6 @@ class MoodMusicBrowserClient : AppCompatActivity() {
 
     public override fun onStop() {
         super.onStop()
-        // (see "stay in sync with the MediaSession")
         MediaControllerCompat.getMediaController(this)?.unregisterCallback(controllerCallback)
         mediaBrowser.disconnect()
     }

@@ -9,7 +9,6 @@ import android.widget.ImageView
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 import com.squareup.picasso.Picasso
-import java.io.File
 
 class MusicAdapter(
     var selectedIds: MutableList<String>
@@ -40,6 +39,7 @@ class MusicAdapter(
         data.addAll(newList)
     }
 
+    // selectedIds are saved as strings, convert them back into media items
     fun getSelectedItems(): MutableList<MediaBrowserCompat.MediaItem> {
         val result = mutableListOf<MediaBrowserCompat.MediaItem>()
         selectedIds.forEach {
@@ -55,17 +55,19 @@ class MusicAdapter(
     inner class ViewHolder(private val v: View) : RecyclerView.ViewHolder(v) {
         private val title: TextView = v.findViewById(R.id.txt_title)
         private val artist: TextView = v.findViewById(R.id.txt_artist)
-        private val albumnArt: ImageView = v.findViewById(R.id.img_album_art)
+        private val albumArt: ImageView = v.findViewById(R.id.img_album_art)
 
         fun bind(item: MediaBrowserCompat.MediaItem) {
             title.text = item.description.title
             artist.text = item.description.subtitle
 
+            // I use Picasso here as this allows us to show a placeholder
+            // in the case that there is no album art available on disk
             Picasso.get()
                 .load(item.description.iconUri)
                 .error(R.drawable.ic_baseline_music_note_24)
                 .placeholder(R.drawable.ic_baseline_music_note_24)
-                .into(albumnArt)
+                .into(albumArt)
 
             v.setOnClickListener {
                 if (selectedIds.contains(item.mediaId)) {

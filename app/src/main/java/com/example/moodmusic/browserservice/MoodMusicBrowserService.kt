@@ -2,7 +2,6 @@ package com.example.moodmusic.browserservice
 
 import android.Manifest
 import android.annotation.SuppressLint
-import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.*
@@ -12,12 +11,8 @@ import android.media.AudioAttributes
 import android.media.AudioFocusRequest
 import android.media.AudioManager
 import android.media.AudioManager.ACTION_AUDIO_BECOMING_NOISY
-import android.media.session.MediaSession
-import android.media.session.PlaybackState
 import android.net.Uri
 import android.os.Bundle
-import android.os.ResultReceiver
-import android.provider.MediaStore
 import android.provider.MediaStore.Audio.Media
 import android.support.v4.media.MediaBrowserCompat
 import android.support.v4.media.MediaDescriptionCompat
@@ -45,29 +40,33 @@ class MoodMusicBrowserService : MediaBrowserServiceCompat() {
 
     private val listOfMusic = mutableListOf<MediaDescriptionCompat>()
 
+    // The afChangeListener responds to requests made by the device when the focus is changed
+    // This prevents our app from playing over other apps.
     private val afChangeListener: AudioManager.OnAudioFocusChangeListener =
         AudioManager.OnAudioFocusChangeListener { focusChange ->
             when (focusChange) {
                 AudioManager.AUDIOFOCUS_GAIN -> {
                     Log.i(MoodMusicBrowserService::class.qualifiedName, "Audio Focus gained")
-                    callback.onPlay()
+                    mediaCallback.onPlay()
                 }
                 AudioManager.AUDIOFOCUS_LOSS -> {
                     Log.i(MoodMusicBrowserService::class.qualifiedName, "Audio Focus lost")
-                    callback.onPause()
+                    mediaCallback.onPause()
                 }
                 AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
                     Log.i(MoodMusicBrowserService::class.qualifiedName, "Audio Focus lost: transient")
-                    callback.onPause()
+                    mediaCallback.onPause()
                 }
                 AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK ->  {
                     Log.i(MoodMusicBrowserService::class.qualifiedName, "Audio Focus lost: transient and can duck")
+                    // Audio ducking is done automatically, nothing to do on this end
                 }
             }
         }
 
-
-    private val callback = object: MediaSessionCompat.Callback() {
+    // The mediaCallback handles the requests to change the playing state
+    // This not only handles requests from the activity, but also from media buttons
+    private val mediaCallback = object: MediaSessionCompat.Callback() {
         private lateinit var audioFocusRequest: AudioFocusRequest
         private val noisyReceiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context?, intent: Intent?) {
@@ -80,13 +79,16 @@ class MoodMusicBrowserService : MediaBrowserServiceCompat() {
         override fun onPlay() {
             Log.d(this::class.qualifiedName, "onPlay called")
 
+            // We don't play music if we have no music
+            // TODO: Notify the user why this failed, or maybe prevent the user from pressing
+            // the play button while there are no items in the queue
             if (!player.hasMusic()) {
                 return
             }
 
             val am = applicationContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-            // Request audio focus for playback, this registers the afChangeListener
 
+            // Request audio focus for playback, this registers the afChangeListener
             audioFocusRequest = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN).run {
                 setOnAudioFocusChangeListener(afChangeListener)
                 setAudioAttributes(AudioAttributes.Builder().run {
@@ -96,17 +98,20 @@ class MoodMusicBrowserService : MediaBrowserServiceCompat() {
                 build()
             }
 
+            // Try to get the audio focus, we don't play anything if we can't have the audio focus
             val result = am.requestAudioFocus(audioFocusRequest)
             if (result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
                 Log.d(this::class.qualifiedName, "Audio focus granted, playing music")
-                // Start the service
+                // Start the service (prevents the service from dying when the activity is closed)
                 startService(Intent(baseContext, MoodMusicBrowserService::class.java))
-                // Set the session active  (and update metadata and state)
                 mediaSession.isActive = true
-                // start the player (custom call)
+
+                // start the player
                 player.play()
+
+                // Start the noisy receiver and update the metadata and playback state
                 registerReceiver(noisyReceiver, IntentFilter(ACTION_AUDIO_BECOMING_NOISY))
-                createMetadataAndPlaybackState(
+                updateMetadataAndPlaybackState(
                     PlaybackStateCompat.STATE_PLAYING,
                     PlaybackStateCompat.ACTION_PAUSE
                 )
@@ -115,6 +120,7 @@ class MoodMusicBrowserService : MediaBrowserServiceCompat() {
             }
         }
 
+        // Stops the media playing
         override fun onStop() {
             Log.d(this::class.qualifiedName, "onStop called")
             val am = applicationContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
@@ -126,7 +132,7 @@ class MoodMusicBrowserService : MediaBrowserServiceCompat() {
             mediaSession.isActive = false
             // stop the player (custom call)
             player.stop()
-            createMetadataAndPlaybackState(
+            updateMetadataAndPlaybackState(
                 PlaybackStateCompat.STATE_STOPPED,
                 PlaybackStateCompat.ACTION_PLAY
             )
@@ -135,11 +141,12 @@ class MoodMusicBrowserService : MediaBrowserServiceCompat() {
             this@MoodMusicBrowserService.stopForeground(false)
         }
 
+        // Pauses the current song
         override fun onPause() {
             applicationContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
             Log.d(this::class.qualifiedName, "onPause called")
             // Update metadata and state
-            createMetadataAndPlaybackState(
+            updateMetadataAndPlaybackState(
                 PlaybackStateCompat.STATE_PAUSED,
                 PlaybackStateCompat.ACTION_PLAY
             )
@@ -151,16 +158,17 @@ class MoodMusicBrowserService : MediaBrowserServiceCompat() {
             this@MoodMusicBrowserService.stopForeground(false)
         }
 
+        // Skips forward to the next song
         override fun onSkipToNext() {
             Log.d(this::class.qualifiedName, "onSkipToNext called")
             player.skipToNext()
             if (player.isPlaying()) {
-                createMetadataAndPlaybackState(
+                updateMetadataAndPlaybackState(
                     PlaybackStateCompat.STATE_PLAYING,
                     PlaybackStateCompat.ACTION_PAUSE
                 )
             } else {
-                createMetadataAndPlaybackState(
+                updateMetadataAndPlaybackState(
                     PlaybackStateCompat.STATE_PAUSED,
                     PlaybackStateCompat.ACTION_PLAY
                 )
@@ -168,16 +176,17 @@ class MoodMusicBrowserService : MediaBrowserServiceCompat() {
             updateNotification()
         }
 
+        // Skips back to the last song
         override fun onSkipToPrevious() {
             Log.d(this::class.qualifiedName, "onSkipToPrevious called")
             player.skipToPrevious()
             if (player.isPlaying()) {
-                createMetadataAndPlaybackState(
+                updateMetadataAndPlaybackState(
                     PlaybackStateCompat.STATE_PLAYING,
                     PlaybackStateCompat.ACTION_PAUSE
                 )
             } else {
-                createMetadataAndPlaybackState(
+                updateMetadataAndPlaybackState(
                     PlaybackStateCompat.STATE_PAUSED,
                     PlaybackStateCompat.ACTION_PLAY
                 )
@@ -185,6 +194,7 @@ class MoodMusicBrowserService : MediaBrowserServiceCompat() {
             updateNotification()
         }
 
+        // Adds an item currently in the queue
         override fun onAddQueueItem(description: MediaDescriptionCompat?) {
             Log.d(this::class.qualifiedName, "onAddQueueItem called")
             description?.apply {
@@ -199,6 +209,7 @@ class MoodMusicBrowserService : MediaBrowserServiceCompat() {
             }
         }
 
+        // Removes an item currently in the queue
         override fun onRemoveQueueItem(description: MediaDescriptionCompat?) {
             Log.d(this::class.qualifiedName, "onRemoveQueueItem called")
             description?.apply {
@@ -215,6 +226,8 @@ class MoodMusicBrowserService : MediaBrowserServiceCompat() {
             }
         }
 
+        // This function handles any custom actions
+        // TODO: Would this be the right place to update playlists?
         override fun onCustomAction(action: String?, extras: Bundle?) {
             when (action) {
                 ACTION_RESET_QUEUE_PLACEMENT -> {
@@ -235,7 +248,7 @@ class MoodMusicBrowserService : MediaBrowserServiceCompat() {
 
         // Create a MediaSessionCompat
         mediaSession = MediaSessionCompat(baseContext, MoodMusicBrowserService::class.java.name).apply {
-            // Set an initial PlaybackState with ACTION_PLAY, so media buttons can start the player
+            // Set an initial PlaybackState with the default actions
             stateBuilder = PlaybackStateCompat.Builder()
                 .setActions(
                     PlaybackStateCompat.ACTION_PLAY or
@@ -244,8 +257,8 @@ class MoodMusicBrowserService : MediaBrowserServiceCompat() {
                             PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS)
             setPlaybackState(stateBuilder.build())
 
-            // MySessionCallback() has methods that handle callbacks from a media controller
-            setCallback(callback)
+            // callback has methods that handle callbacks from a media controller
+            setCallback(mediaCallback)
 
             // Set the session's token so that client activities can communicate with it.
             setSessionToken(sessionToken)
@@ -253,20 +266,22 @@ class MoodMusicBrowserService : MediaBrowserServiceCompat() {
         }
 
         player = MoodMusicPlayerManager(applicationContext) {
-            createMetadataAndPlaybackState(PlaybackStateCompat.STATE_PLAYING, PlaybackStateCompat.ACTION_PAUSE)
+            updateMetadataAndPlaybackState(PlaybackStateCompat.STATE_PLAYING, PlaybackStateCompat.ACTION_PAUSE)
             updateNotification()
         }
 
         initializeNotification()
-
         loadMusicFiles()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // This allows the mediaSession to respond to media buttons
         MediaButtonReceiver.handleIntent(mediaSession, intent)
         return super.onStartCommand(intent, flags, startId)
     }
 
+    // This function returns the root browser so that apps can get the media items to browse
+    // What media items should be returned should be determined by #onLoadChildren()
     override fun onGetRoot(
         clientPackageName: String,
         clientUid: Int,
@@ -286,6 +301,9 @@ class MoodMusicBrowserService : MediaBrowserServiceCompat() {
 
     }
 
+    // This function returns a list of mediaItems through the result parameter.
+    // This function gets called when a client calls #subscribe()
+    // Note that the client should use #getRoot() for the parentId parameter
     override fun onLoadChildren(
         parentId: String,
         result: Result<MutableList<MediaBrowserCompat.MediaItem>>
@@ -296,23 +314,22 @@ class MoodMusicBrowserService : MediaBrowserServiceCompat() {
             return
         }
 
-        // Assume for example that the music catalog is already loaded/cached.
-
         val mediaItems = mutableListOf<MediaBrowserCompat.MediaItem>()
 
         // Check if this is the root menu:
         if (MEDIA_ROOT_ID == parentId) {
-            // Build the MediaItem objects for the top level,
-            // and put them in the mediaItems list...
+            // Send everything in the listOfMusic
             listOfMusic.forEach {
                 mediaItems.add(MediaBrowserCompat.MediaItem(it, MediaBrowserCompat.MediaItem.FLAG_PLAYABLE))
             }
         } else {
-            // TODO: Maybe using this to show items of a playlist is the more ideal option?
+            // TODO: Use this to sort by playlist
         }
         result.sendResult(mediaItems)
     }
 
+    // This function sets the values for the notification. Note that stuff like contentText don't
+    // get set as this will get updated in #updateNotification()
     private fun initializeNotification() {
         notificationBuilder = NotificationCompat.Builder(applicationContext, CHANNEL_ID).apply {
             // Stop the service when the notification is swiped away
@@ -342,7 +359,7 @@ class MoodMusicBrowserService : MediaBrowserServiceCompat() {
                     )
                 )
             )
-            // Add a pause button
+            // Add a pause button (this will change in #updateNotification())
             addAction(
                 NotificationCompat.Action(
                     android.R.drawable.ic_media_pause,
@@ -382,7 +399,8 @@ class MoodMusicBrowserService : MediaBrowserServiceCompat() {
         }
     }
 
-    fun createMetadataAndPlaybackState(newState: Int, newAction: Long) {
+    // This function updates the metadata and playback state
+    fun updateMetadataAndPlaybackState(newState: Int, newAction: Long) {
         val currentSong = player.getCurrentSong()
         val metadata = MediaMetadataCompat.Builder()
             .putText(MediaMetadataCompat.METADATA_KEY_TITLE, currentSong.title)
@@ -401,6 +419,8 @@ class MoodMusicBrowserService : MediaBrowserServiceCompat() {
         mediaSession.setPlaybackState(playbackState)
     }
 
+    // This function updates the notification with new information, such as the song that is playing
+    // or the play/pause button icon/functionality
     @SuppressLint("RestrictedApi")
     fun updateNotification() {
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -411,10 +431,12 @@ class MoodMusicBrowserService : MediaBrowserServiceCompat() {
         val playbackState = controller.playbackState
         val description = mediaMetadata.description
 
+        // Create the notification channel
         val importance = NotificationManager.IMPORTANCE_LOW
         val channel = NotificationChannel(CHANNEL_ID, getString(R.string.channel_name), importance)
         manager.createNotificationChannel(channel)
 
+        // Update the notification builder with new information
         notificationBuilder.apply {
             // Add the metadata for the currently playing track
             setContentTitle(description.title)
@@ -435,6 +457,7 @@ class MoodMusicBrowserService : MediaBrowserServiceCompat() {
                 icon = android.R.drawable.ic_media_play
                 title = getString(R.string.play)
             }
+            // This is apparently restricted API, but suppressing the warning seems to make it work
             mActions[1] = NotificationCompat.Action(
                 icon,
                 title,
@@ -450,6 +473,7 @@ class MoodMusicBrowserService : MediaBrowserServiceCompat() {
 
     }
 
+    // This function finds the music files on disk using a content resolver then adds them to the list of music
     private fun loadMusicFiles() {
         if (checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
             // TODO: The permission should be requested when the user interacts with some sort of component.

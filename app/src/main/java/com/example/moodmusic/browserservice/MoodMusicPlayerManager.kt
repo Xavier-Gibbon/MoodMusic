@@ -6,10 +6,11 @@ import android.media.MediaPlayer
 import android.support.v4.media.MediaDescriptionCompat
 
 // This class is responsible for knowing what songs are in the current playlist
-// as well as having the means to play those songs
+// as well as having the means to play those songs using the mediaPlayer
 
 class MoodMusicPlayerManager(
     private val context: Context,
+    // This is used by the service to update the metadata and notification when the song ends naturally
     private val onPlayCompletion: () -> Unit
 ) {
     var playList: MutableList<MediaDescriptionCompat> = mutableListOf()
@@ -138,15 +139,6 @@ class MoodMusicPlayerManager(
 
     fun getCurrentSong(): MediaDescriptionCompat {
         return playList[currentMusic]
-    }
-
-    fun teardown() {
-        player?.apply {
-            stop()
-            release()
-        }
-
-        player = null
     }
 
     private fun createNewReadyPlayer() : MediaPlayer {
