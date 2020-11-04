@@ -16,7 +16,7 @@ class MoodMusicPlayerManager(
     private var playList: MutableList<MediaDescriptionCompat> = mutableListOf()
     private var currentMusic = 0
 
-    private var player: MediaPlayer? = null
+    var player: MediaPlayer? = null
 
     fun hasMusic(): Boolean {
         return playList.isNotEmpty()
