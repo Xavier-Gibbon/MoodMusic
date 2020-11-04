@@ -14,9 +14,9 @@ class MoodMusicPlayerManager(
     private val onPlayCompletion: () -> Unit
 ) {
     private var playList: MutableList<MediaDescriptionCompat> = mutableListOf()
-    private var currentMusic = 0
+    var currentMusic = 0
 
-    var player: MediaPlayer? = null
+    private var player: MediaPlayer? = null
 
     fun hasMusic(): Boolean {
         return playList.isNotEmpty()
