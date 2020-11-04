@@ -13,8 +13,8 @@ class MoodMusicPlayerManager(
     // This is used by the service to update the metadata and notification when the song ends naturally
     private val onPlayCompletion: () -> Unit
 ) {
-    var playList: MutableList<MediaDescriptionCompat> = mutableListOf()
-    var currentMusic = 0
+    private var playList: MutableList<MediaDescriptionCompat> = mutableListOf()
+    private var currentMusic = 0
 
     private var player: MediaPlayer? = null
 

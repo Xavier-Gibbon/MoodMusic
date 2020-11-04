@@ -35,14 +35,13 @@ private const val NOTIFICATION_ID = 6906
 
 class MoodMusicBrowserService : MediaBrowserServiceCompat() {
     private lateinit var mediaSession: MediaSessionCompat
-    private lateinit var stateBuilder: PlaybackStateCompat.Builder
     private lateinit var player: MoodMusicPlayerManager
 
     private val listOfMusic = mutableListOf<MediaDescriptionCompat>()
 
     // The afChangeListener responds to requests made by the device when the focus is changed
     // This prevents our app from playing over other apps.
-    private val afChangeListener: AudioManager.OnAudioFocusChangeListener =
+    private val focusChangeListener: AudioManager.OnAudioFocusChangeListener =
         AudioManager.OnAudioFocusChangeListener { focusChange ->
             when (focusChange) {
                 AudioManager.AUDIOFOCUS_GAIN -> {
@@ -93,7 +92,7 @@ class MoodMusicBrowserService : MediaBrowserServiceCompat() {
 
             // Request audio focus for playback, this registers the afChangeListener
             audioFocusRequest = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN).run {
-                setOnAudioFocusChangeListener(afChangeListener)
+                setOnAudioFocusChangeListener(focusChangeListener)
                 setAudioAttributes(AudioAttributes.Builder().run {
                     setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
                     build()
@@ -252,7 +251,7 @@ class MoodMusicBrowserService : MediaBrowserServiceCompat() {
         // Create a MediaSessionCompat
         mediaSession = MediaSessionCompat(baseContext, MoodMusicBrowserService::class.java.name).apply {
             // Set an initial PlaybackState with the default actions
-            stateBuilder = PlaybackStateCompat.Builder()
+            val stateBuilder = PlaybackStateCompat.Builder()
                 .setActions(
                     PlaybackStateCompat.ACTION_PLAY or
                             PlaybackStateCompat.ACTION_PLAY_PAUSE or
@@ -425,7 +424,7 @@ class MoodMusicBrowserService : MediaBrowserServiceCompat() {
     // This function updates the notification with new information, such as the song that is playing
     // or the play/pause button icon/functionality
     @SuppressLint("RestrictedApi")
-    fun updateNotification() {
+    private fun updateNotification() {
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
         // Get the session's metadata

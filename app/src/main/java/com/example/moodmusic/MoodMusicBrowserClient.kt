@@ -53,7 +53,7 @@ class MoodMusicBrowserClient : AppCompatActivity() {
 
         // This sets up the buttons in the activity and updates the UI using the metadata and playback state
         // TODO: Should we have the buttons disabled by default, then enabled here?
-        fun buildTransportControls() {
+        private fun buildTransportControls() {
             val mediaController = MediaControllerCompat.getMediaController(this@MoodMusicBrowserClient)
             val adapter = findViewById<RecyclerView>(R.id.list_music).adapter as MusicAdapter
             // Grab the view for the play/pause button
