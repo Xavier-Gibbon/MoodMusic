@@ -1,6 +1,8 @@
 package com.example.moodmusic
 
+import android.Manifest
 import android.content.ComponentName
+import android.content.pm.PackageManager
 import android.media.AudioManager
 import android.os.Bundle
 import android.support.v4.media.MediaBrowserCompat
@@ -10,12 +12,14 @@ import android.support.v4.media.session.PlaybackStateCompat
 import android.util.Log
 import android.widget.ImageView
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.example.moodmusic.browserservice.ACTION_RESET_QUEUE_PLACEMENT
 import com.example.moodmusic.browserservice.MoodMusicBrowserService
 
 const val SELECTED_MUSIC_KEY = "selected_music"
+const val PERMISSION_CODE = 55
 
 class MoodMusicBrowserClient : AppCompatActivity() {
 
@@ -166,6 +170,12 @@ class MoodMusicBrowserClient : AppCompatActivity() {
     public override fun onStart() {
         super.onStart()
         mediaBrowser.connect()
+
+        // TODO: There should be an interactable component that requests for the permission
+        if (checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+            // TODO: The permission should be requested when the user interacts with some sort of component.
+            ActivityCompat.requestPermissions(this, listOf(Manifest.permission.READ_EXTERNAL_STORAGE).toTypedArray(), PERMISSION_CODE)
+        }
     }
 
     public override fun onResume() {
@@ -183,5 +193,21 @@ class MoodMusicBrowserClient : AppCompatActivity() {
         super.onSaveInstanceState(outState)
         val adapter = findViewById<RecyclerView>(R.id.list_music).adapter as MusicAdapter
         outState.putStringArrayList(SELECTED_MUSIC_KEY, ArrayList(adapter.selectedIds))
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        //TODO: if the permission is denied, there needs to be a way to re-request the permission
+        if (requestCode == PERMISSION_CODE) {
+            if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                // The service should also be re-created from this as nothing else is bound to it
+                // and it doesn't stick around due to it not playing any music
+                recreate()
+            }
+        }
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
     }
 }

@@ -35,7 +35,6 @@ private const val NOTIFICATION_ID = 6906
 
 class MoodMusicBrowserService : MediaBrowserServiceCompat() {
     private lateinit var mediaSession: MediaSessionCompat
-    private lateinit var player: MoodMusicPlayerManager
 
     private val listOfMusic = mutableListOf<MediaDescriptionCompat>()
 
@@ -67,6 +66,7 @@ class MoodMusicBrowserService : MediaBrowserServiceCompat() {
     // This not only handles requests from the activity, but also from media buttons
     private val mediaCallback = object: MediaSessionCompat.Callback() {
         private lateinit var audioFocusRequest: AudioFocusRequest
+        private lateinit var player: MoodMusicPlayerManager
 
         // noisyReceiver is used to pause the music if the phone becomes noisy
         // e.g. if the headphones are unplugged
@@ -74,6 +74,15 @@ class MoodMusicBrowserService : MediaBrowserServiceCompat() {
             override fun onReceive(context: Context?, intent: Intent?) {
                 if (intent?.action == ACTION_AUDIO_BECOMING_NOISY) {
                     onPause()
+                }
+            }
+        }
+
+        // IMPORTANT: This must be called before calling any other function in this object
+        fun createPlayer() {
+            if (!this::player.isInitialized) {
+                player = MoodMusicPlayerManager(applicationContext) {
+                    onSkipToNext(true)
                 }
             }
         }
@@ -118,7 +127,7 @@ class MoodMusicBrowserService : MediaBrowserServiceCompat() {
                     PlaybackStateCompat.ACTION_PAUSE
                 )
                 // Put the service in the foreground, post notification
-                this@MoodMusicBrowserService.updateNotification()
+                updateNotification()
             }
         }
 
@@ -162,9 +171,16 @@ class MoodMusicBrowserService : MediaBrowserServiceCompat() {
 
         // Skips forward to the next song
         override fun onSkipToNext() {
+            onSkipToNext(false)
+        }
+
+        fun onSkipToNext(forcePlay: Boolean) {
+            // forcePlay should be true only when the current song is finished
+            // as '#isPlaying()' returns false
             Log.d(this::class.qualifiedName, "onSkipToNext called")
-            player.skipToNext()
-            if (player.isPlaying()) {
+
+            player.skipToNext(forcePlay)
+            if (forcePlay || player.isPlaying()) {
                 updateMetadataAndPlaybackState(
                     PlaybackStateCompat.STATE_PLAYING,
                     PlaybackStateCompat.ACTION_PAUSE
@@ -241,12 +257,18 @@ class MoodMusicBrowserService : MediaBrowserServiceCompat() {
                 }
             }
         }
+
+        fun getCurrentSong(): MediaDescriptionCompat {
+            return player.getCurrentSong()
+        }
+
     }
 
     private lateinit var notificationBuilder: NotificationCompat.Builder
 
     override fun onCreate() {
         super.onCreate()
+        mediaCallback.createPlayer()
 
         // Create a MediaSessionCompat
         mediaSession = MediaSessionCompat(baseContext, MoodMusicBrowserService::class.java.name).apply {
@@ -265,11 +287,6 @@ class MoodMusicBrowserService : MediaBrowserServiceCompat() {
             // Set the session's token so that client activities can communicate with it.
             setSessionToken(sessionToken)
             setFlags(MediaSessionCompat.FLAG_HANDLES_QUEUE_COMMANDS)
-        }
-
-        player = MoodMusicPlayerManager(applicationContext) {
-            updateMetadataAndPlaybackState(PlaybackStateCompat.STATE_PLAYING, PlaybackStateCompat.ACTION_PAUSE)
-            updateNotification()
         }
 
         initializeNotification()
@@ -333,6 +350,12 @@ class MoodMusicBrowserService : MediaBrowserServiceCompat() {
     // This function sets the values for the notification. Note that stuff like contentText don't
     // get set as this will get updated in #updateNotification()
     private fun initializeNotification() {
+        // Create the notification channel
+        val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val importance = NotificationManager.IMPORTANCE_LOW
+        val channel = NotificationChannel(CHANNEL_ID, getString(R.string.channel_name), importance)
+        manager.createNotificationChannel(channel)
+
         notificationBuilder = NotificationCompat.Builder(applicationContext, CHANNEL_ID).apply {
             // Stop the service when the notification is swiped away
             setDeleteIntent(
@@ -354,7 +377,7 @@ class MoodMusicBrowserService : MediaBrowserServiceCompat() {
             addAction(
                 NotificationCompat.Action(
                     android.R.drawable.ic_media_previous,
-                    getString(R.string.pause),
+                    getString(R.string.skip_to_previous),
                     MediaButtonReceiver.buildMediaButtonPendingIntent(
                         applicationContext,
                         PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS
@@ -376,7 +399,7 @@ class MoodMusicBrowserService : MediaBrowserServiceCompat() {
             addAction(
                 NotificationCompat.Action(
                     android.R.drawable.ic_media_next,
-                    getString(R.string.pause),
+                    getString(R.string.skip_to_next),
                     MediaButtonReceiver.buildMediaButtonPendingIntent(
                         applicationContext,
                         PlaybackStateCompat.ACTION_SKIP_TO_NEXT
@@ -387,7 +410,7 @@ class MoodMusicBrowserService : MediaBrowserServiceCompat() {
             // Take advantage of MediaStyle features
             setStyle(androidx.media.app.NotificationCompat.MediaStyle()
                 .setMediaSession(mediaSession.sessionToken)
-                .setShowActionsInCompactView(0)
+                .setShowActionsInCompactView(0, 1, 2)
 
                 // Add a cancel button
                 .setShowCancelButton(true)
@@ -403,7 +426,7 @@ class MoodMusicBrowserService : MediaBrowserServiceCompat() {
 
     // This function updates the metadata and playback state
     fun updateMetadataAndPlaybackState(newState: Int, newAction: Long) {
-        val currentSong = player.getCurrentSong()
+        val currentSong = mediaCallback.getCurrentSong()
         val metadata = MediaMetadataCompat.Builder()
             .putText(MediaMetadataCompat.METADATA_KEY_TITLE, currentSong.title)
             .putText(MediaMetadataCompat.METADATA_KEY_ARTIST, currentSong.subtitle)
@@ -425,18 +448,10 @@ class MoodMusicBrowserService : MediaBrowserServiceCompat() {
     // or the play/pause button icon/functionality
     @SuppressLint("RestrictedApi")
     private fun updateNotification() {
-        val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-
-        // Get the session's metadata
+        // Get the session's metadata and playback state
         val controller = mediaSession.controller
-        val mediaMetadata = controller.metadata
         val playbackState = controller.playbackState
-        val description = mediaMetadata.description
-
-        // Create the notification channel
-        val importance = NotificationManager.IMPORTANCE_LOW
-        val channel = NotificationChannel(CHANNEL_ID, getString(R.string.channel_name), importance)
-        manager.createNotificationChannel(channel)
+        val description = controller.metadata.description
 
         // Update the notification builder with new information
         notificationBuilder.apply {

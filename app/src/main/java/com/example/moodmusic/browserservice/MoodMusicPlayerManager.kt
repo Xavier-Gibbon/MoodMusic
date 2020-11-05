@@ -76,10 +76,6 @@ class MoodMusicPlayerManager(
         player = null
     }
 
-    fun skipToNext() {
-        skipToNext(false)
-    }
-
     fun skipToNext(forcePlay: Boolean) {
         if (!hasMusic()) {
             return
@@ -155,7 +151,6 @@ class MoodMusicPlayerManager(
             }
             prepare()
             setOnCompletionListener {
-                skipToNext(true)
                 onPlayCompletion()
             }
         }
