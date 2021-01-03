@@ -11,12 +11,18 @@ import android.support.v4.media.session.MediaControllerCompat
 import android.support.v4.media.session.PlaybackStateCompat
 import android.util.Log
 import android.widget.ImageView
+import androidx.appcompat.app.ActionBarDrawerToggle
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
+import androidx.core.view.GravityCompat
+import androidx.drawerlayout.widget.DrawerLayout
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.example.moodmusic.browserservice.ACTION_RESET_QUEUE_PLACEMENT
 import com.example.moodmusic.browserservice.MoodMusicBrowserService
+import com.example.moodmusic.screenfragments.MusicListFragment
+import com.example.moodmusic.screenfragments.ScreenFragment
+import kotlinx.android.synthetic.main.activity_main.*
 
 const val SELECTED_MUSIC_KEY = "selected_music"
 const val PERMISSION_CODE = 55
@@ -24,6 +30,7 @@ const val PERMISSION_CODE = 55
 class MoodMusicBrowserClient : AppCompatActivity() {
 
     private lateinit var mediaBrowser: MediaBrowserCompat
+    private lateinit var drawer: DrawerLayout
     private var rootString = ""
 
     // connectionCallbacks handles the appropriate methods for connecting to the browser service
@@ -137,27 +144,26 @@ class MoodMusicBrowserClient : AppCompatActivity() {
             parentId: String,
             children: MutableList<MediaBrowserCompat.MediaItem>
         ) {
-            val adapter = findViewById<RecyclerView>(R.id.list_music).adapter as MusicAdapter
-            adapter.updateDataset(children)
-            adapter.notifyDataSetChanged()
+            val fragment = supportFragmentManager.findFragmentById(R.id.cont_fragment) as ScreenFragment
+            fragment.onChildrenLoaded(parentId, children)
         }
     }
 
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_list_view)
+        setContentView(R.layout.activity_main)
 
-        val data = mutableListOf<String>()
-        if (savedInstanceState !== null) {
-            data.addAll(savedInstanceState.getStringArrayList(SELECTED_MUSIC_KEY)!!)
-        }
+        val listFragment = MusicListFragment()
+        supportFragmentManager.beginTransaction().replace(R.id.cont_fragment, listFragment).commit()
 
-        val adapter = MusicAdapter(data)
-        val list = findViewById<RecyclerView>(R.id.list_music)
+        setSupportActionBar(findViewById(R.id.toolbar))
+        supportActionBar!!.setDisplayHomeAsUpEnabled(true)
 
-        list.layoutManager = LinearLayoutManager(this@MoodMusicBrowserClient)
-        list.adapter = adapter
+        drawer = findViewById(R.id.drawer_layout)
+        val actionBarDrawerToggle = ActionBarDrawerToggle(this, drawer, toolbar, R.string.navigation_drawer_open, R.string.navigation_drawer_close)
+        drawer.addDrawerListener(actionBarDrawerToggle)
+        actionBarDrawerToggle.syncState()
 
         mediaBrowser = MediaBrowserCompat(
             this,
@@ -193,6 +199,14 @@ class MoodMusicBrowserClient : AppCompatActivity() {
         super.onSaveInstanceState(outState)
         val adapter = findViewById<RecyclerView>(R.id.list_music).adapter as MusicAdapter
         outState.putStringArrayList(SELECTED_MUSIC_KEY, ArrayList(adapter.selectedIds))
+    }
+
+    override fun onBackPressed() {
+        if (drawer.isDrawerOpen(GravityCompat.START)) {
+            drawer.closeDrawer(GravityCompat.START)
+            return
+        }
+        super.onBackPressed()
     }
 
     override fun onRequestPermissionsResult(

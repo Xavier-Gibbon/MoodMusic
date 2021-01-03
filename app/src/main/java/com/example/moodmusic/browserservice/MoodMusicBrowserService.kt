@@ -94,6 +94,7 @@ class MoodMusicBrowserService : MediaBrowserServiceCompat() {
             // TODO: Notify the user why this failed, or maybe prevent the user from pressing
             // the play button while there are no items in the queue
             if (!player.hasMusic()) {
+                Log.w(this::class.qualifiedName, "The service doesn't have any music prepared!")
                 return
             }
 
@@ -128,6 +129,8 @@ class MoodMusicBrowserService : MediaBrowserServiceCompat() {
                 )
                 // Put the service in the foreground, post notification
                 updateNotification()
+            } else {
+                Log.d(this::class.qualifiedName, "Unable to get the audio focus")
             }
         }
 

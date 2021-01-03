@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    tools:showIn="navigation_view">
+
+    <group android:checkableBehavior="single" >
+        <item
+            android:id="@+id/item_now_playing"
+            android:icon="@drawable/ic_play_arrow"
+            android:title="Now Playing" />
+        <item
+            android:id="@+id/item_playlists"
+            android:icon="@drawable/ic_playlists"
+            android:title="Playlists" />
+        <item
+            android:id="@+id/item_songs"
+            android:icon="@drawable/ic_baseline_music_note_24"
+            android:title="Songs" />
+    </group>
+</menu>
