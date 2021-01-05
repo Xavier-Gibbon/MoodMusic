@@ -12,9 +12,9 @@
             android:id="@+id/item_playlists"
             android:icon="@drawable/ic_playlists"
             android:title="Playlists" />
-        <item
+        <!--<item
             android:id="@+id/item_songs"
             android:icon="@drawable/ic_baseline_music_note_24"
-            android:title="Songs" />
+            android:title="Songs" />-->
     </group>
 </menu>

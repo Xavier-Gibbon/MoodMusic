@@ -21,7 +21,9 @@ import androidx.recyclerview.widget.RecyclerView
 import com.example.moodmusic.browserservice.ACTION_RESET_QUEUE_PLACEMENT
 import com.example.moodmusic.browserservice.MoodMusicBrowserService
 import com.example.moodmusic.screenfragments.MusicListFragment
+import com.example.moodmusic.screenfragments.NowPlayingFragment
 import com.example.moodmusic.screenfragments.ScreenFragment
+import com.google.android.material.navigation.NavigationView
 import kotlinx.android.synthetic.main.activity_main.*
 
 const val SELECTED_MUSIC_KEY = "selected_music"
@@ -51,7 +53,7 @@ class MoodMusicBrowserClient : AppCompatActivity() {
             buildTransportControls()
 
             rootString = mediaBrowser.root
-            mediaBrowser.subscribe(rootString, subscriptionCallback)
+            notifyFragmentOfSubscription()
         }
 
         override fun onConnectionSuspended() {
@@ -84,24 +86,7 @@ class MoodMusicBrowserClient : AppCompatActivity() {
                 mediaController.transportControls.skipToPrevious()
             }
 
-            findViewById<ImageView>(R.id.btn_update_playlist).setOnClickListener {
-                if (adapter.getSelectedItems().isEmpty()) {
-                    return@setOnClickListener
-                }
-
-                // When we are updating the playlist, we expect the media to go back to the start
-                mediaController.transportControls.sendCustomAction(ACTION_RESET_QUEUE_PLACEMENT, null)
-
-                if (mediaController.queue != null) {
-                    mediaController.queue.forEach {
-                        mediaController.removeQueueItem(it.description)
-                    }
-                }
-
-                adapter.getSelectedItems().forEach {
-                    mediaController.addQueueItem(it.description)
-                }
-            }
+            getCurrentFragment().setupTransportControls(mediaController)
 
             // Display the initial state
             val metadata = mediaController.metadata
@@ -137,33 +122,11 @@ class MoodMusicBrowserClient : AppCompatActivity() {
         }
     }
 
-    // The subscription callback handles getting the media items from the service
-    // Right now, this just fills in the music list, but it can be used for showing playlists
-    private var subscriptionCallback = object: MediaBrowserCompat.SubscriptionCallback() {
-        override fun onChildrenLoaded(
-            parentId: String,
-            children: MutableList<MediaBrowserCompat.MediaItem>
-        ) {
-            val fragment = supportFragmentManager.findFragmentById(R.id.cont_fragment) as ScreenFragment
-            fragment.onChildrenLoaded(parentId, children)
-        }
-    }
-
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
-
-        val listFragment = MusicListFragment()
-        supportFragmentManager.beginTransaction().replace(R.id.cont_fragment, listFragment).commit()
-
         setSupportActionBar(findViewById(R.id.toolbar))
         supportActionBar!!.setDisplayHomeAsUpEnabled(true)
-
-        drawer = findViewById(R.id.drawer_layout)
-        val actionBarDrawerToggle = ActionBarDrawerToggle(this, drawer, toolbar, R.string.navigation_drawer_open, R.string.navigation_drawer_close)
-        drawer.addDrawerListener(actionBarDrawerToggle)
-        actionBarDrawerToggle.syncState()
 
         mediaBrowser = MediaBrowserCompat(
             this,
@@ -171,6 +134,28 @@ class MoodMusicBrowserClient : AppCompatActivity() {
             connectionCallbacks,
             null // optional Bundle
         )
+
+        drawer = findViewById(R.id.drawer_layout)
+        val navigationView = findViewById<NavigationView>(R.id.nav_view)
+        navigationView.setNavigationItemSelectedListener {
+            when (it.itemId) {
+                R.id.item_playlists ->
+                    setupFragment(MusicListFragment())
+                R.id.item_now_playing ->
+                    setupFragment(NowPlayingFragment())
+            }
+
+            drawer.closeDrawer(GravityCompat.START)
+            true
+        }
+        if (savedInstanceState == null) {
+            navigationView.setCheckedItem(R.id.item_playlists)
+            setupFragment(MusicListFragment())
+        }
+
+        val actionBarDrawerToggle = ActionBarDrawerToggle(this, drawer, toolbar, R.string.navigation_drawer_open, R.string.navigation_drawer_close)
+        drawer.addDrawerListener(actionBarDrawerToggle)
+        actionBarDrawerToggle.syncState()
     }
 
     public override fun onStart() {
@@ -223,5 +208,23 @@ class MoodMusicBrowserClient : AppCompatActivity() {
             }
         }
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+    }
+
+    private fun setupFragment(newFragment: ScreenFragment) {
+        supportFragmentManager.beginTransaction().replace(R.id.cont_fragment, newFragment).commitNow()
+        if (mediaBrowser.isConnected) {
+            mediaBrowser.unsubscribe(rootString)
+            mediaBrowser.subscribe(rootString, newFragment.getSubscriptionCallback())
+            newFragment.setupTransportControls(MediaControllerCompat.getMediaController(this))
+        }
+    }
+
+    private fun getCurrentFragment(): ScreenFragment {
+        return supportFragmentManager.findFragmentById(R.id.cont_fragment) as ScreenFragment
+    }
+
+    private fun notifyFragmentOfSubscription() {
+        val fragment = getCurrentFragment()
+        mediaBrowser.subscribe(rootString, fragment.getSubscriptionCallback())
     }
 }
